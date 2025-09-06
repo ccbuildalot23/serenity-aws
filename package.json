@@ -1,0 +1,48 @@
+{
+  "name": "serenity-aws",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HIPAA-compliant mental health platform on AWS",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "npm run dev --workspace=@serenity/api",
+    "dev:web": "npm run dev --workspace=@serenity/web",
+    "build": "turbo run build",
+    "build:api": "npm run build --workspace=@serenity/api",
+    "build:web": "npm run build --workspace=@serenity/web",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "npm run db:migrate --workspace=@serenity/database",
+    "db:generate": "npm run db:generate --workspace=@serenity/database",
+    "db:seed": "npm run db:seed --workspace=@serenity/database",
+    "db:studio": "npm run db:studio --workspace=@serenity/database",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "deploy": "turbo run deploy",
+    "deploy:dev": "npm run deploy:dev",
+    "deploy:prod": "npm run deploy:prod",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down",
+    "cdk:deploy": "cd infrastructure && npm run cdk:deploy",
+    "cdk:destroy": "cd infrastructure && npm run cdk:destroy"
+  },
+  "devDependencies": {
+    "turbo": "^1.11.2",
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3",
+    "prettier": "^3.1.1",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

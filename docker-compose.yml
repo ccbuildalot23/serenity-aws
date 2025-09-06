@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: serenity-db
+    environment:
+      POSTGRES_USER: serenity
+      POSTGRES_PASSWORD: serenity_dev_password
+      POSTGRES_DB: serenity
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U serenity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: serenity-localstack
+    ports:
+      - "4566:4566"
+      - "4571:4571"
+    environment:
+      - SERVICES=cognito-idp,s3,ses,sns,kms,secretsmanager,cloudwatch
+      - DEBUG=0
+      - DATA_DIR=/tmp/localstack/data
+      - LAMBDA_EXECUTOR=local
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - "./tmp/localstack:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: serenity-api
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://serenity:serenity_dev_password@postgres:5432/serenity
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_ENDPOINT: http://localstack:4566
+      COGNITO_USER_POOL_ID: us-east-1_test
+      COGNITO_CLIENT_ID: test_client_id
+      COGNITO_CLIENT_SECRET: test_client_secret
+      JWT_SECRET: development-secret-key-min-32-characters
+      ENCRYPTION_KEY: development-encryption-key-32chr
+      API_PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: npm run dev
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: serenity-web
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:3001
+      VITE_COGNITO_USER_POOL_ID: us-east-1_test
+      VITE_COGNITO_CLIENT_ID: test_client_id
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    command: npm run dev
+
+  prisma-studio:
+    build:
+      context: .
+      dockerfile: packages/database/Dockerfile
+    container_name: serenity-prisma-studio
+    ports:
+      - "5555:5555"
+    environment:
+      DATABASE_URL: postgresql://serenity:serenity_dev_password@postgres:5432/serenity
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npx prisma studio --port 5555 --host 0.0.0.0
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: serenity-network

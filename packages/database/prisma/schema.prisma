@@ -1,0 +1,353 @@
+// Prisma Schema for Serenity AWS
+// HIPAA-compliant mental health platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== CORE MODELS ====================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  plan      TenantPlan @default(PROFESSIONAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  users     User[]
+  
+  @@index([plan])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  cognitoId    String   @unique // AWS Cognito user ID
+  email        String   @unique
+  firstName    String?
+  lastName     String?
+  phoneNumber  String?
+  role         UserRole
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Multi-tenant
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // Relationships
+  profile           PatientProfile?
+  providerProfile   ProviderProfile?
+  supporterProfile  SupporterProfile?
+  checkIns          CheckIn[]
+  crisisAlerts      CrisisAlert[]
+  auditLogs         AuditLog[]
+  sessions          Session[]
+  
+  @@index([email])
+  @@index([cognitoId])
+  @@index([tenantId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([token])
+}
+
+// ==================== USER PROFILES ====================
+
+model PatientProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth     DateTime?
+  sobrietyDate    DateTime?
+  diagnoses       String[] // Encrypted in application layer
+  medications     String[] // Encrypted in application layer
+  
+  // Relationships
+  emergencyContacts EmergencyContact[]
+  goals            RecoveryGoal[]
+  crisisPlan       CrisisPlan?
+  providers        ProviderPatient[]
+  supporters       PatientSupporter[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ProviderProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber   String?
+  specialty       String?
+  organization    String?
+  npiNumber       String?  // National Provider Identifier
+  
+  // Relationships
+  patients        ProviderPatient[]
+  carePlans       CarePlan[]
+  billingEvents   BillingEvent[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SupporterProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationship    String?  // e.g., "Spouse", "Friend", "Sponsor"
+  
+  // Relationships
+  patients        PatientSupporter[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ==================== RELATIONSHIPS ====================
+
+model ProviderPatient {
+  id         String   @id @default(cuid())
+  providerId String
+  provider   ProviderProfile @relation(fields: [providerId], references: [id])
+  patientId  String
+  patient    PatientProfile @relation(fields: [patientId], references: [id])
+  assignedAt DateTime @default(now())
+  isActive   Boolean  @default(true)
+  
+  @@unique([providerId, patientId])
+  @@index([providerId])
+  @@index([patientId])
+}
+
+model PatientSupporter {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     PatientProfile @relation(fields: [patientId], references: [id])
+  supporterId String
+  supporter   SupporterProfile @relation(fields: [supporterId], references: [id])
+  tier        Int      @default(1) // 1 = primary, 2 = secondary, etc.
+  canReceiveAlerts Boolean @default(true)
+  addedAt     DateTime @default(now())
+  
+  @@unique([patientId, supporterId])
+  @@index([patientId])
+  @@index([supporterId])
+}
+
+// ==================== CLINICAL DATA ====================
+
+model CheckIn {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  // Core metrics (1-10 scale)
+  moodScore     Int
+  anxietyLevel  Int
+  sleepQuality  Int
+  
+  // Additional tracking
+  tookMedication Boolean @default(false)
+  hadCravings   Boolean @default(false)
+  cravingIntensity Int?  // 1-10 if hadCravings is true
+  triggers      String[]
+  copingStrategies String[]
+  notes         String?  // Encrypted PHI
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CrisisAlert {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  severity    CrisisSeverity
+  message     String?  // Encrypted
+  location    Json?    // Latitude, longitude
+  
+  // Response tracking
+  status      AlertStatus @default(ACTIVE)
+  respondedBy String?
+  respondedAt DateTime?
+  resolution  String?
+  
+  // Notifications sent
+  notificationsSent Json[] // Array of {contactId, method, sentAt}
+  
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model EmergencyContact {
+  id            String   @id @default(cuid())
+  patientId     String
+  patient       PatientProfile @relation(fields: [patientId], references: [id])
+  name          String
+  phoneNumber   String
+  email         String?
+  relationship  String
+  isPrimary     Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([patientId])
+}
+
+// ==================== CARE MANAGEMENT ====================
+
+model RecoveryGoal {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     PatientProfile @relation(fields: [patientId], references: [id])
+  title       String
+  description String?
+  targetDate  DateTime?
+  status      GoalStatus @default(ACTIVE)
+  progress    Int      @default(0) // 0-100 percentage
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+  
+  @@index([patientId])
+  @@index([status])
+}
+
+model CarePlan {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id])
+  patientId   String
+  title       String
+  objectives  Json[]   // Array of objectives
+  interventions Json[] // Array of interventions
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([providerId])
+  @@index([patientId])
+}
+
+model CrisisPlan {
+  id               String   @id @default(cuid())
+  patientId        String   @unique
+  patient          PatientProfile @relation(fields: [patientId], references: [id])
+  warningSignsJson Json[]   // Array of warning signs
+  copingStrategies Json[]   // Array of strategies
+  supportNetwork   Json[]   // Array of contacts
+  safeEnvironment  String?  // Description of safe environment
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ==================== BILLING & COMPLIANCE ====================
+
+model BillingEvent {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id])
+  patientId   String
+  code        String   // CPT code (e.g., "99490" for CCM)
+  description String
+  minutes     Int
+  rate        Decimal  @db.Decimal(10, 2)
+  amount      Decimal  @db.Decimal(10, 2)
+  status      BillingStatus @default(PENDING)
+  
+  billedAt    DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+  
+  @@index([providerId])
+  @@index([patientId])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String   // e.g., "VIEW_PHI", "UPDATE_CHECKIN", "TRIGGER_ALERT"
+  resourceType String  // e.g., "CheckIn", "PatientProfile"
+  resourceId  String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  timestamp   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+}
+
+// ==================== ENUMS ====================
+
+enum TenantPlan {
+  PROFESSIONAL // $299/mo - 1 provider, 50 patients
+  PRACTICE     // $599/mo - 20 providers, 500 patients
+  ENTERPRISE   // $1999/mo - unlimited
+}
+
+enum UserRole {
+  PATIENT
+  PROVIDER
+  SUPPORTER
+  ADMIN
+}
+
+enum CrisisSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  FALSE_ALARM
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum BillingStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  DENIED
+  PAID
+}
