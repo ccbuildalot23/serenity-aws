@@ -8,7 +8,8 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:prod": "prisma migrate deploy",
     "db:seed": "tsx src/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:unit": "echo 'No unit tests for database package'"
   },
   "dependencies": {
     "@prisma/client": "^5.7.1"
