@@ -6,10 +6,29 @@ const mockConsole = {
   log: jest.spyOn(console, 'log').mockImplementation()
 };
 
+// Mock localStorage with proper implementation
+const mockLocalStorage = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: jest.fn((key: string) => store[key] || null),
+    setItem: jest.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    })
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+
 describe('AuditLogger', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    localStorage.clear();
+    mockLocalStorage.clear();
     mockConsole.error.mockClear();
     mockConsole.log.mockClear();
   });
@@ -309,6 +328,311 @@ describe('AuditLogger', () => {
       // All IDs should be unique
       const uniqueIds = new Set(ids);
       expect(uniqueIds.size).toBe(ids.length);
+    });
+
+    it('enforces 6-year retention policy requirement', () => {
+      // Add old log (simulate 7 years old)
+      const oldDate = new Date();
+      oldDate.setFullYear(oldDate.getFullYear() - 7);
+      
+      auditLogger.log({
+        event: AuditEventType.PHI_VIEW,
+        userId: 'user-123',
+        action: 'old event'
+      });
+
+      // Manually set old timestamp to simulate aged data
+      const logs = auditLogger.getLogs();
+      logs[0].timestamp = oldDate.toISOString();
+      localStorage.setItem('hipaa_audit_logs', JSON.stringify(logs));
+
+      const compliance = auditLogger.checkRetentionCompliance();
+      expect(compliance.compliant).toBe(false);
+      expect(compliance.oldestLog).toEqual(oldDate);
+    });
+
+    it('marks PHI events correctly for compliance tracking', () => {
+      const phiEvents = [
+        AuditEventType.PHI_VIEW,
+        AuditEventType.PHI_CREATE,
+        AuditEventType.PHI_UPDATE,
+        AuditEventType.PHI_DELETE,
+        AuditEventType.PHI_EXPORT
+      ];
+
+      phiEvents.forEach(eventType => {
+        auditLogger.log({
+          event: eventType,
+          userId: 'provider-123',
+          resourceId: 'patient-456',
+          action: 'PHI access',
+          phiAccessed: true
+        });
+      });
+
+      const logs = auditLogger.getLogs();
+      const phiLogs = logs.filter(log => log.phiAccessed);
+      
+      expect(phiLogs).toHaveLength(phiEvents.length);
+      phiLogs.forEach(log => {
+        expect(phiEvents).toContain(log.event as AuditEventType);
+      });
+    });
+  });
+
+  describe('Error Handling and Edge Cases', () => {
+    it('handles localStorage quota exceeded gracefully', () => {
+      const originalSetItem = localStorage.setItem;
+      localStorage.setItem = jest.fn(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      expect(() => {
+        auditLogger.log({
+          event: AuditEventType.SYSTEM_ERROR,
+          userId: 'user-123',
+          action: 'test event'
+        });
+      }).not.toThrow();
+
+      localStorage.setItem = originalSetItem;
+    });
+
+    it('handles corrupted localStorage data', () => {
+      // Set invalid JSON
+      localStorage.setItem('hipaa_audit_logs', 'invalid-json-data');
+
+      const logs = auditLogger.getLogs();
+      expect(logs).toEqual([]);
+    });
+
+    it('handles missing userId gracefully', () => {
+      auditLogger.log({
+        event: AuditEventType.SYSTEM_ERROR,
+        action: 'system event with no user'
+      });
+
+      const logs = auditLogger.getLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0].userId).toBeUndefined();
+    });
+
+    it('handles extremely long action descriptions', () => {
+      const longAction = 'A'.repeat(10000); // 10KB action string
+      
+      auditLogger.log({
+        event: AuditEventType.PHI_VIEW,
+        userId: 'user-123',
+        action: longAction
+      });
+
+      const logs = auditLogger.getLogs();
+      expect(logs).toHaveLength(1);
+      expect(logs[0].action).toBe(longAction);
+    });
+
+    it('handles concurrent log operations', () => {
+      // Simulate rapid concurrent logging
+      const promises = Array.from({ length: 10 }, (_, i) => 
+        Promise.resolve().then(() => auditLogger.log({
+          event: AuditEventType.LOGIN,
+          userId: `user-${i}`,
+          action: `concurrent login ${i}`
+        }))
+      );
+
+      return Promise.all(promises).then(() => {
+        const logs = auditLogger.getLogs();
+        expect(logs.length).toBeGreaterThanOrEqual(10);
+      });
+    });
+
+    it('validates event timestamps are chronological', () => {
+      const startTime = Date.now();
+      
+      auditLogger.log({
+        event: AuditEventType.LOGIN,
+        userId: 'user-1',
+        action: 'first event'
+      });
+
+      // Small delay
+      jest.advanceTimersByTime(100);
+
+      auditLogger.log({
+        event: AuditEventType.PHI_VIEW,
+        userId: 'user-1',
+        action: 'second event'
+      });
+
+      const logs = auditLogger.getLogs();
+      const firstTime = new Date(logs[1].timestamp).getTime();
+      const secondTime = new Date(logs[0].timestamp).getTime();
+
+      expect(secondTime).toBeGreaterThan(firstTime);
+    });
+  });
+
+  describe('Security Event Detection', () => {
+    beforeEach(() => {
+      // Clear logs before each test
+      localStorage.removeItem('hipaa_audit_logs');
+    });
+
+    it('detects suspicious rapid PHI access patterns', () => {
+      const userId = 'suspicious-user';
+      
+      // Log 11 PHI access events rapidly (triggers alert at 10)
+      for (let i = 0; i < 11; i++) {
+        auditLogger.log({
+          event: AuditEventType.PHI_VIEW,
+          userId,
+          resourceId: `patient-${i}`,
+          action: 'rapid PHI access',
+          phiAccessed: true
+        });
+      }
+
+      const logs = auditLogger.getLogs();
+      const suspiciousEvents = logs.filter(log => 
+        log.event === AuditEventType.SUSPICIOUS_ACTIVITY &&
+        log.action.includes('Rapid PHI access detected')
+      );
+
+      expect(suspiciousEvents.length).toBeGreaterThan(0);
+      expect(suspiciousEvents[0].details?.phiAccessCount).toBe(10);
+    });
+
+    it('detects multiple failed authentication attempts', () => {
+      const userId = 'failing-user';
+      
+      // Log 4 failed attempts (triggers alert at 3)
+      for (let i = 0; i < 4; i++) {
+        auditLogger.log({
+          event: AuditEventType.AUTH_FAILURE,
+          userId,
+          action: 'failed login attempt',
+          result: 'failure'
+        });
+      }
+
+      const logs = auditLogger.getLogs();
+      const suspiciousEvents = logs.filter(log => 
+        log.event === AuditEventType.SUSPICIOUS_ACTIVITY &&
+        log.action.includes('Multiple failed attempts detected')
+      );
+
+      expect(suspiciousEvents.length).toBeGreaterThan(0);
+      expect(suspiciousEvents[0].details?.failedAttempts).toBe(3);
+    });
+
+    it('does not flag legitimate user activity patterns', () => {
+      const userId = 'legitimate-user';
+      
+      // Log normal activity pattern
+      auditLogger.log({
+        event: AuditEventType.LOGIN,
+        userId,
+        action: 'user login',
+        result: 'success'
+      });
+
+      auditLogger.log({
+        event: AuditEventType.PHI_VIEW,
+        userId,
+        resourceId: 'patient-123',
+        action: 'view patient data',
+        phiAccessed: true,
+        result: 'success'
+      });
+
+      const logs = auditLogger.getLogs();
+      const suspiciousEvents = logs.filter(log => 
+        log.event === AuditEventType.SUSPICIOUS_ACTIVITY
+      );
+
+      expect(suspiciousEvents).toHaveLength(0);
+    });
+  });
+
+  describe('Performance and Scalability', () => {
+    it('maintains performance with large log volumes', () => {
+      const startTime = performance.now();
+      
+      // Add 500 logs
+      for (let i = 0; i < 500; i++) {
+        auditLogger.log({
+          event: AuditEventType.PHI_VIEW,
+          userId: `user-${i % 10}`,
+          resourceId: `patient-${i}`,
+          action: `bulk log entry ${i}`
+        });
+      }
+      
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      
+      // Should complete in reasonable time (< 1000ms)
+      expect(duration).toBeLessThan(1000);
+      
+      const logs = auditLogger.getLogs();
+      expect(logs.length).toBeLessThanOrEqual(1000); // Respects max limit
+    });
+
+    it('efficiently filters large datasets', () => {
+      // Add diverse logs
+      for (let i = 0; i < 100; i++) {
+        auditLogger.log({
+          event: i % 2 === 0 ? AuditEventType.PHI_VIEW : AuditEventType.LOGIN,
+          userId: `user-${i % 5}`,
+          resourceId: `resource-${i}`,
+          action: `test action ${i}`,
+          phiAccessed: i % 2 === 0
+        });
+      }
+
+      const startTime = performance.now();
+      
+      const filteredLogs = auditLogger.getLogs({
+        event: AuditEventType.PHI_VIEW,
+        phiOnly: true
+      });
+      
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      
+      expect(duration).toBeLessThan(100); // Fast filtering
+      expect(filteredLogs.length).toBe(50); // Correct filtering
+      filteredLogs.forEach(log => {
+        expect(log.event).toBe(AuditEventType.PHI_VIEW);
+        expect(log.phiAccessed).toBe(true);
+      });
+    });
+
+    it('generates reports efficiently for large date ranges', () => {
+      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+      const endDate = new Date();
+      
+      // Add logs across date range
+      for (let i = 0; i < 50; i++) {
+        auditLogger.log({
+          event: AuditEventType.PHI_VIEW,
+          userId: `user-${i % 3}`,
+          action: `report test ${i}`,
+          phiAccessed: true
+        });
+      }
+
+      const startTime = performance.now();
+      const report = auditLogger.generateReport(startDate, endDate);
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+
+      expect(duration).toBeLessThan(100); // Fast report generation
+      expect(report.totalEvents).toBe(50);
+      expect(report.phiAccess).toBe(50);
+      expect(report.uniqueUsers).toBe(3);
+      expect(report.eventBreakdown[AuditEventType.PHI_VIEW]).toBe(50);
     });
   });
 });

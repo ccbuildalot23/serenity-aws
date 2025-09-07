@@ -3,7 +3,18 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import SessionTimeout from '@/components/compliance/SessionTimeout';
 import { auditLogger } from '@/utils/auditLog';
 
-// Mock dependencies
+// Mock store
+const mockLogout = jest.fn();
+const mockUser = { id: 'user-123', email: 'test@example.com', role: 'provider' as const };
+
+jest.mock('@/store/useStore', () => ({
+  useStore: () => ({
+    user: mockUser,
+    logout: mockLogout
+  })
+}));
+
+// Mock audit logger
 jest.mock('@/utils/auditLog', () => ({
   auditLogger: {
     log: jest.fn(),
@@ -11,6 +22,7 @@ jest.mock('@/utils/auditLog', () => ({
   }
 }));
 
+// Mock sonner toasts
 jest.mock('sonner', () => ({
   toast: {
     warning: jest.fn(),
@@ -18,13 +30,43 @@ jest.mock('sonner', () => ({
   }
 }));
 
+// Mock localStorage
+const mockLocalStorage = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: jest.fn((key: string) => store[key] || null),
+    setItem: jest.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    })
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+
+// Mock window.location
+const mockLocation = {
+  href: '',
+  assign: jest.fn(),
+  reload: jest.fn()
+};
+
+// Use delete and redefine approach
+delete (window as any).location;
+(window as any).location = mockLocation;
+
 describe('SessionTimeout Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Clear localStorage
-    localStorage.clear();
-    // Use fake timers for each test
+    mockLocalStorage.clear();
+    mockLocation.href = '';
     jest.useFakeTimers();
+    jest.setSystemTime(new Date('2024-01-01T12:00:00Z'));
   });
 
   afterEach(() => {
@@ -32,205 +74,413 @@ describe('SessionTimeout Component', () => {
     jest.useRealTimers();
   });
 
-  it('renders without crashing', () => {
-    render(<SessionTimeout />);
-    // Component renders but shows no visible content initially
-    expect(document.body).toBeInTheDocument();
-  });
+  describe('Basic Rendering', () => {
+    it('renders without crashing with authenticated user', () => {
+      render(<SessionTimeout />);
+      expect(document.body).toBeInTheDocument();
+    });
 
-  it('accepts timeout configuration props', () => {
-    const customTimeout = 20; // 20 minutes
-    const customWarning = 5; // 5 minutes warning
+    it('renders timeout indicator when no warning shown', () => {
+      render(<SessionTimeout />);
+      expect(screen.getByText('Session timeout: 15 min')).toBeInTheDocument();
+    });
 
-    render(
-      <SessionTimeout 
-        timeoutMinutes={customTimeout}
-        warningMinutes={customWarning}
-      />
-    );
-
-    // Component should render without issues with custom props
-    expect(document.body).toBeInTheDocument();
-  });
-
-  it('accepts callback props', () => {
-    const mockOnTimeout = jest.fn();
-    const mockOnExtend = jest.fn();
-    const mockOnWarning = jest.fn();
-
-    render(
-      <SessionTimeout 
-        onTimeout={mockOnTimeout}
-        onExtendSession={mockOnExtend}
-        onWarning={mockOnWarning}
-      />
-    );
-
-    // Component should render without issues with callbacks
-    expect(document.body).toBeInTheDocument();
-  });
-
-  it('uses default HIPAA-compliant timeout of 15 minutes', () => {
-    render(<SessionTimeout />);
-    
-    // The component should set up timers (implementation specific)
-    // We verify the component initializes without errors
-    expect(document.body).toBeInTheDocument();
-    
-    // In a real implementation, this would verify setTimeout was called
-    // with 15 minutes (900000ms)
-  });
-
-  it('handles user activity events', () => {
-    render(<SessionTimeout />);
-    
-    // Simulate various user activities
-    const activities = [
-      () => fireEvent.mouseMove(document),
-      () => fireEvent.keyDown(document),
-      () => fireEvent.click(document),
-      () => fireEvent.scroll(document)
-    ];
-
-    // All activities should be handled without errors
-    activities.forEach((activity) => {
-      expect(() => activity()).not.toThrow();
+    it('does not render when user is not authenticated', () => {
+      jest.doMock('@/store/useStore', () => ({
+        useStore: () => ({
+          user: null,
+          logout: mockLogout
+        })
+      }));
+      
+      const { container } = render(<SessionTimeout />);
+      expect(container.firstChild).toBeNull();
     });
   });
 
-  it('tracks last activity timestamp', () => {
-    render(<SessionTimeout />);
-    
-    // Perform activity
-    fireEvent.mouseMove(document);
-    
-    // Should store timestamp in localStorage (implementation specific)
-    // The exact key depends on component implementation
-    expect(localStorage.setItem).toHaveBeenCalled();
-  });
-
-  it('provides warning before timeout', () => {
-    const mockOnWarning = jest.fn();
-    render(<SessionTimeout onWarning={mockOnWarning} />);
-    
-    // Fast-forward to warning time (13 minutes for 15-min timeout)
-    act(() => {
-      jest.advanceTimersByTime(13 * 60 * 1000);
+  describe('Configuration Props', () => {
+    it('accepts custom timeout configuration', () => {
+      render(
+        <SessionTimeout 
+          timeoutMinutes={20}
+          warningMinutes={5}
+        />
+      );
+      
+      expect(screen.getByText('Session timeout: 20 min')).toBeInTheDocument();
     });
-    
-    // In a real implementation, this would trigger warning
-    // For now, we verify the component doesn't crash
-    expect(document.body).toBeInTheDocument();
-  });
 
-  it('handles timeout event', () => {
-    const mockOnTimeout = jest.fn();
-    render(<SessionTimeout onTimeout={mockOnTimeout} />);
-    
-    // Fast-forward to timeout (15 minutes)
-    act(() => {
-      jest.advanceTimersByTime(15 * 60 * 1000);
+    it('calls onTimeout callback when provided', () => {
+      const onTimeout = jest.fn();
+      render(<SessionTimeout timeoutMinutes={1} onTimeout={onTimeout} />);
+      
+      // Advance to timeout
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      expect(onTimeout).toHaveBeenCalled();
     });
-    
-    // Component should handle timeout without crashing
-    expect(document.body).toBeInTheDocument();
-  });
 
-  it('allows session extension', () => {
-    const mockOnExtend = jest.fn();
-    render(<SessionTimeout onExtendSession={mockOnExtend} />);
-    
-    // Fast-forward to warning time
-    act(() => {
-      jest.advanceTimersByTime(13 * 60 * 1000);
+    it('calls onWarning callback when warning appears', () => {
+      const onWarning = jest.fn();
+      render(
+        <SessionTimeout 
+          timeoutMinutes={3}
+          warningMinutes={1}
+          onWarning={onWarning}
+        />
+      );
+      
+      // Advance to warning time (2 minutes)
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      expect(onWarning).toHaveBeenCalled();
     });
-    
-    // If component shows extend button, clicking it should not crash
-    // Implementation specific - depends on actual component UI
-    expect(document.body).toBeInTheDocument();
-  });
 
-  it('clears timers on unmount', () => {
-    const { unmount } = render(<SessionTimeout />);
-    
-    // Spy on clearTimeout
-    const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
-    
-    // Unmount component
-    unmount();
-    
-    // Timers should be cleaned up (implementation specific)
-    // The component should unmount cleanly
-    expect(true).toBe(true);
-    
-    clearTimeoutSpy.mockRestore();
-  });
-
-  it('respects HIPAA compliance requirements', () => {
-    render(<SessionTimeout />);
-    
-    // HIPAA requires 15-minute maximum timeout for PHI access
-    // Component should implement this by default
-    expect(document.body).toBeInTheDocument();
-    
-    // Fast-forward and verify behavior aligns with HIPAA
-    act(() => {
-      jest.advanceTimersByTime(15 * 60 * 1000);
-    });
-    
-    // Should not crash and should handle timeout appropriately
-    expect(document.body).toBeInTheDocument();
-  });
-
-  it('works with different activity types', () => {
-    render(<SessionTimeout />);
-    
-    const activityTypes = [
-      'mousemove',
-      'keypress',
-      'click',
-      'scroll',
-      'touchstart'
-    ];
-    
-    // All activity types should be handled
-    activityTypes.forEach(type => {
-      const event = new Event(type);
-      expect(() => document.dispatchEvent(event)).not.toThrow();
+    it('calls onActivity callback when user is active', () => {
+      const onActivity = jest.fn();
+      render(<SessionTimeout onActivity={onActivity} />);
+      
+      // Simulate activity
+      fireEvent.mouseDown(document);
+      
+      expect(onActivity).toHaveBeenCalled();
     });
   });
 
-  it('integrates with audit logging', () => {
-    const mockAuditLog = auditLogger.log as jest.Mock;
-    render(<SessionTimeout />);
-    
-    // Fast-forward to timeout
-    act(() => {
-      jest.advanceTimersByTime(15 * 60 * 1000);
+  describe('Timer Functionality', () => {
+    it('shows warning modal at correct time', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Should not show warning initially
+      expect(screen.queryByText('Session Timeout Warning')).not.toBeInTheDocument();
+      
+      // Advance to warning time (2 minutes)
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      // Warning modal should appear
+      expect(screen.getByText('Session Timeout Warning')).toBeInTheDocument();
+      expect(screen.getByText('Your session will expire soon')).toBeInTheDocument();
     });
-    
-    // Component should log timeout events for HIPAA compliance
-    // This is implementation specific
-    expect(document.body).toBeInTheDocument();
+
+    it('displays countdown in warning modal', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Advance to warning
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      // Should show 1 minute countdown (60 seconds)
+      expect(screen.getByText('1:00')).toBeInTheDocument();
+      
+      // Advance 30 seconds
+      act(() => {
+        jest.advanceTimersByTime(30 * 1000);
+      });
+      
+      // Should show 30 seconds remaining
+      expect(screen.getByText('0:30')).toBeInTheDocument();
+    });
+
+    it('triggers timeout after full duration', () => {
+      render(<SessionTimeout timeoutMinutes={2} />);
+      
+      // Advance full timeout duration
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      // Should have called logout and redirect
+      expect(mockLogout).toHaveBeenCalled();
+      expect(mockLocation.href).toBe('/login?reason=timeout');
+    });
   });
 
-  it('provides accessibility support', () => {
-    render(<SessionTimeout />);
+  describe('User Activity Handling', () => {
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
     
-    // Component should be accessible
-    // Warning dialogs should be announced to screen readers
-    // This is implementation specific but component should render
-    expect(document.body).toBeInTheDocument();
+    activityEvents.forEach(eventType => {
+      it(`resets timers on ${eventType} activity`, () => {
+        render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+        
+        // Advance most of the way to warning
+        act(() => {
+          jest.advanceTimersByTime(1.9 * 60 * 1000);
+        });
+        
+        // Perform activity
+        fireEvent[eventType as keyof typeof fireEvent](document);
+        
+        // Advance past original warning time
+        act(() => {
+          jest.advanceTimersByTime(0.2 * 60 * 1000);
+        });
+        
+        // Warning should not appear because timer was reset
+        expect(screen.queryByText('Session Timeout Warning')).not.toBeInTheDocument();
+      });
+    });
+
+    it('debounces activity events (only resets after 1 second gap)', () => {
+      render(<SessionTimeout />);
+      
+      // Multiple rapid activities
+      fireEvent.mouseDown(document);
+      fireEvent.mouseDown(document);
+      fireEvent.mouseDown(document);
+      
+      // Should only reset timers once due to debouncing
+      expect(mockLocalStorage.setItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('dismisses warning modal when user becomes active', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Show warning
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      expect(screen.getByText('Session Timeout Warning')).toBeInTheDocument();
+      
+      // User activity should reset and hide warning
+      fireEvent.mouseDown(document);
+      
+      expect(screen.queryByText('Session Timeout Warning')).not.toBeInTheDocument();
+    });
   });
 
-  it('handles multiple instances gracefully', () => {
-    // Multiple SessionTimeout components should not conflict
-    const { unmount: unmount1 } = render(<SessionTimeout />);
-    const { unmount: unmount2 } = render(<SessionTimeout />);
-    
-    expect(document.body).toBeInTheDocument();
-    
-    unmount1();
-    unmount2();
+  describe('Session Extension', () => {
+    it('allows user to continue session from warning modal', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Show warning
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      const continueButton = screen.getByText('Continue Session');
+      fireEvent.click(continueButton);
+      
+      // Warning should disappear
+      expect(screen.queryByText('Session Timeout Warning')).not.toBeInTheDocument();
+      
+      // Timers should be reset - advance to original timeout and verify no logout
+      act(() => {
+        jest.advanceTimersByTime(3 * 60 * 1000);
+      });
+      
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('logs session extension event', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Show warning and continue
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      fireEvent.click(screen.getByText('Continue Session'));
+      
+      // Should log extension to localStorage
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        'auditLogs',
+        expect.stringContaining('SESSION_EXTENDED')
+      );
+    });
+  });
+
+  describe('Logout Functionality', () => {
+    it('allows immediate logout from warning modal', () => {
+      render(<SessionTimeout timeoutMinutes={3} warningMinutes={1} />);
+      
+      // Show warning
+      act(() => {
+        jest.advanceTimersByTime(2 * 60 * 1000);
+      });
+      
+      fireEvent.click(screen.getByText('Logout Now'));
+      
+      expect(mockLogout).toHaveBeenCalled();
+      expect(mockLocation.href).toBe('/login?reason=timeout');
+    });
+  });
+
+  describe('Audit Logging', () => {
+    it('logs timeout event with proper details', () => {
+      render(<SessionTimeout timeoutMinutes={1} />);
+      
+      // Trigger timeout
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      // Should log timeout to localStorage
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        'auditLogs',
+        expect.stringContaining('SESSION_TIMEOUT')
+      );
+      
+      const logCall = mockLocalStorage.setItem.mock.calls.find(
+        call => call[0] === 'auditLogs' && call[1].includes('SESSION_TIMEOUT')
+      );
+      
+      expect(logCall).toBeTruthy();
+      const logData = JSON.parse(logCall![1]);
+      const timeoutLog = logData.find((log: any) => log.event === 'SESSION_TIMEOUT');
+      
+      expect(timeoutLog).toMatchObject({
+        event: 'SESSION_TIMEOUT',
+        userId: 'user-123',
+        reason: 'Inactivity timeout after 15 minutes'
+      });
+    });
+
+    it('logs session extension event', () => {
+      render(<SessionTimeout timeoutMinutes={2} warningMinutes={1} />);
+      
+      // Show warning and extend
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      fireEvent.click(screen.getByText('Continue Session'));
+      
+      const logCall = mockLocalStorage.setItem.mock.calls.find(
+        call => call[0] === 'auditLogs' && call[1].includes('SESSION_EXTENDED')
+      );
+      
+      expect(logCall).toBeTruthy();
+      const logData = JSON.parse(logCall![1]);
+      const extensionLog = logData.find((log: any) => log.event === 'SESSION_EXTENDED');
+      
+      expect(extensionLog).toMatchObject({
+        event: 'SESSION_EXTENDED',
+        userId: 'user-123',
+        action: 'User continued session before timeout'
+      });
+    });
+  });
+
+  describe('Timer Cleanup', () => {
+    it('clears all timers on unmount', () => {
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+      
+      const { unmount } = render(<SessionTimeout />);
+      unmount();
+      
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      
+      clearTimeoutSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+    });
+
+    it('clears event listeners on unmount', () => {
+      const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener');
+      
+      const { unmount } = render(<SessionTimeout />);
+      unmount();
+      
+      // Should remove all activity event listeners
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function));
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('touchstart', expect.any(Function));
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
+      
+      removeEventListenerSpy.mockRestore();
+    });
+  });
+
+  describe('HIPAA Compliance', () => {
+    it('enforces 15-minute default timeout for PHI access', () => {
+      render(<SessionTimeout />);
+      
+      // Default should be 15 minutes
+      expect(screen.getByText('Session timeout: 15 min')).toBeInTheDocument();
+    });
+
+    it('shows HIPAA compliance message in warning modal', () => {
+      render(<SessionTimeout timeoutMinutes={2} warningMinutes={1} />);
+      
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      expect(screen.getByText('HIPAA Security Requirement')).toBeInTheDocument();
+      expect(screen.getByText(/Automatic logout protects patient data/)).toBeInTheDocument();
+    });
+
+    it('includes security explanation in warning', () => {
+      render(<SessionTimeout />);
+      
+      act(() => {
+        jest.advanceTimersByTime(13 * 60 * 1000);
+      });
+      
+      expect(screen.getByText(/For security reasons, your session will automatically end/)).toBeInTheDocument();
+      expect(screen.getByText(/This helps protect sensitive patient information/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('handles localStorage errors gracefully', () => {
+      // Mock localStorage to throw error
+      const originalSetItem = mockLocalStorage.setItem;
+      mockLocalStorage.setItem = jest.fn(() => {
+        throw new Error('Storage quota exceeded');
+      });
+      
+      // Should not crash when localStorage fails
+      expect(() => {
+        render(<SessionTimeout />);
+        fireEvent.mouseDown(document);
+      }).not.toThrow();
+      
+      mockLocalStorage.setItem = originalSetItem;
+    });
+
+    it('handles multiple simultaneous instances', () => {
+      const { unmount: unmount1 } = render(<SessionTimeout />);
+      const { unmount: unmount2 } = render(<SessionTimeout />);
+      
+      // Both should render without conflicts
+      expect(screen.getAllByText('Session timeout: 15 min')).toHaveLength(2);
+      
+      unmount1();
+      unmount2();
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('warning modal has proper ARIA attributes', () => {
+      render(<SessionTimeout timeoutMinutes={2} warningMinutes={1} />);
+      
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      const modal = screen.getByRole('dialog', { hidden: true });
+      expect(modal).toBeInTheDocument();
+    });
+
+    it('provides screen reader accessible countdown', () => {
+      render(<SessionTimeout timeoutMinutes={2} warningMinutes={1} />);
+      
+      act(() => {
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      
+      expect(screen.getByText('Time remaining before automatic logout')).toBeInTheDocument();
+    });
   });
 });

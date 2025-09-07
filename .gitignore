@@ -54,6 +54,13 @@ cdk.out
 *.swo
 *~
 
+# Vim
+*.un~
+.*.swp
+.*.swo
+Session.vim
+.netrwhist
+
 # OS
 .DS_Store
 Thumbs.db
