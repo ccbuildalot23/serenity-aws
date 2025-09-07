@@ -13,6 +13,7 @@ interface AppState {
   user: User | null;
   isAuthenticated: boolean;
   setUser: (user: User | null) => void;
+  logout: () => void;
   
   // Check-in state
   lastCheckIn: Date | null;
@@ -46,6 +47,8 @@ export const useStore = create<AppState>()(
 
       // Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
+      
+      logout: () => set({ user: null, isAuthenticated: false }),
       
       setLastCheckIn: (date) => set({ lastCheckIn: date }),
       

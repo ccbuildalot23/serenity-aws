@@ -115,7 +115,7 @@ class EnvironmentConfig {
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.error('❌ Environment validation failed:');
-        error.errors.forEach(err => {
+        error.issues.forEach(err => {
           console.error(`  - ${err.path.join('.')}: ${err.message}`);
         });
         throw new Error('Invalid environment configuration');

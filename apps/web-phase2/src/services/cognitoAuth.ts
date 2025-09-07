@@ -4,7 +4,7 @@
  */
 
 import apiService from './apiService';
-import { auditLogger } from '@/utils/auditLog';
+import { auditLogger, AuditEventType } from '@/utils/auditLog';
 
 interface CognitoConfig {
   userPoolId: string;
@@ -59,9 +59,14 @@ class CognitoAuthService {
     try {
       // Log authentication attempt
       auditLogger.log({
-        event: 'AUTH_ATTEMPT',
+        event: AuditEventType.AUTH_ATTEMPT,
         userId: credentials.email,
-        metadata: { timestamp: new Date().toISOString() }
+        action: 'authenticate',
+        result: 'warning', // Will be updated based on actual result
+        details: { 
+          email: credentials.email,
+          timestamp: new Date().toISOString() 
+        }
       });
 
       // In production, this would call Cognito's authentication API
@@ -122,18 +127,28 @@ class CognitoAuthService {
 
       // Log successful authentication
       auditLogger.log({
-        event: 'AUTH_SUCCESS',
+        event: AuditEventType.AUTH_SUCCESS,
         userId: authResult.user.id,
-        metadata: { role: authResult.user.role }
+        action: 'authenticate',
+        result: 'success',
+        details: { 
+          role: authResult.user.role,
+          timestamp: new Date().toISOString()
+        }
       });
 
       return authResult;
     } catch (error: any) {
       // Log failed authentication
       auditLogger.log({
-        event: 'AUTH_FAILURE',
+        event: AuditEventType.AUTH_FAILURE,
         userId: credentials.email,
-        metadata: { error: error.message }
+        action: 'authenticate',
+        result: 'failure',
+        details: { 
+          error: error.message,
+          timestamp: new Date().toISOString()
+        }
       });
 
       throw error;
@@ -185,9 +200,15 @@ class CognitoAuthService {
 
     // Log mock authentication
     auditLogger.log({
-      event: 'AUTH_SUCCESS',
+      event: AuditEventType.AUTH_SUCCESS,
       userId: mockUser.id,
-      metadata: { role: mockUser.role, mock: true }
+      action: 'authenticate',
+      result: 'success',
+      details: { 
+        role: mockUser.role, 
+        mock: true,
+        timestamp: new Date().toISOString()
+      }
     });
 
     return {
@@ -203,9 +224,11 @@ class CognitoAuthService {
     // Log logout
     if (this.currentUser) {
       auditLogger.log({
-        event: 'LOGOUT',
+        event: AuditEventType.LOGOUT,
         userId: this.currentUser.id,
-        metadata: { timestamp: new Date().toISOString() }
+        action: 'logout',
+        result: 'success',
+        details: { timestamp: new Date().toISOString() }
       });
     }
 
@@ -279,9 +302,11 @@ class CognitoAuthService {
 
     // Log password change attempt
     auditLogger.log({
-      event: 'PASSWORD_CHANGE_ATTEMPT',
+      event: AuditEventType.PASSWORD_CHANGE_ATTEMPT,
       userId: this.currentUser.id,
-      metadata: { timestamp: new Date().toISOString() }
+      action: 'change_password',
+      result: 'warning',
+      details: { timestamp: new Date().toISOString() }
     });
 
     // In production, this would call Cognito's change password API
@@ -290,9 +315,11 @@ class CognitoAuthService {
 
     // Log successful password change
     auditLogger.log({
-      event: 'PASSWORD_CHANGE_SUCCESS',
+      event: AuditEventType.PASSWORD_CHANGE_SUCCESS,
       userId: this.currentUser.id,
-      metadata: { timestamp: new Date().toISOString() }
+      action: 'change_password',
+      result: 'success',
+      details: { timestamp: new Date().toISOString() }
     });
   }
 
@@ -302,9 +329,11 @@ class CognitoAuthService {
   async requestPasswordReset(email: string): Promise<void> {
     // Log password reset request
     auditLogger.log({
-      event: 'PASSWORD_RESET_REQUEST',
+      event: AuditEventType.PASSWORD_RESET_REQUEST,
       userId: email,
-      metadata: { timestamp: new Date().toISOString() }
+      action: 'request_password_reset',
+      result: 'success',
+      details: { timestamp: new Date().toISOString() }
     });
 
     // In production, this would call Cognito's forgot password API
@@ -318,9 +347,11 @@ class CognitoAuthService {
   async confirmPasswordReset(email: string, code: string, newPassword: string): Promise<void> {
     // Log password reset confirmation
     auditLogger.log({
-      event: 'PASSWORD_RESET_CONFIRM',
+      event: AuditEventType.PASSWORD_RESET_CONFIRM,
       userId: email,
-      metadata: { timestamp: new Date().toISOString() }
+      action: 'confirm_password_reset',
+      result: 'success',
+      details: { timestamp: new Date().toISOString() }
     });
 
     // In production, this would call Cognito's confirm forgot password API

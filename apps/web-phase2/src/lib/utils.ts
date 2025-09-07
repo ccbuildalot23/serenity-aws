@@ -23,6 +23,13 @@ export function formatTime(date: Date | string): string {
   }).format(d);
 }
 
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+}
+
 export function calculateRiskLevel(mood: number, anxiety: number, cravingIntensity: number): 'low' | 'moderate' | 'high' | 'critical' {
   let riskScore = 0;
   
