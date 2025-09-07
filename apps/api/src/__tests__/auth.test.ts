@@ -5,15 +5,41 @@ import { AuthService } from '../services/auth.service';
 // Mock AWS SDK
 jest.mock('@aws-sdk/client-cognito-identity-provider', () => ({
   CognitoIdentityProviderClient: jest.fn().mockImplementation(() => ({
-    send: jest.fn().mockResolvedValue({
-      UserSub: 'test-user-id',
-      User: { Username: 'test@example.com' },
-      AuthenticationResult: {
-        AccessToken: 'mock-access-token',
-        RefreshToken: 'mock-refresh-token',
-        IdToken: 'mock-id-token',
-        ExpiresIn: 3600,
-      },
+    send: jest.fn().mockImplementation((command) => {
+      // Mock GetUserCommand response
+      if (command.constructor.name === 'GetUserCommand') {
+        const token = command.input?.AccessToken;
+        
+        // For session timeout test - simulate expired session
+        if (token === 'old-token') {
+          return Promise.reject({
+            name: 'NotAuthorizedException',
+            message: 'Access Token has expired',
+          });
+        }
+        
+        return Promise.resolve({
+          Username: 'test@example.com',
+          UserAttributes: [
+            { Name: 'email', Value: 'test@example.com' },
+            { Name: 'custom:role', Value: 'PATIENT' },
+            { Name: 'custom:tenantId', Value: 'test-tenant' },
+            { Name: 'given_name', Value: 'Test' },
+            { Name: 'family_name', Value: 'User' },
+          ],
+        });
+      }
+      // Default mock response for other commands
+      return Promise.resolve({
+        UserSub: 'test-user-id',
+        User: { Username: 'test@example.com' },
+        AuthenticationResult: {
+          AccessToken: 'mock-access-token',
+          RefreshToken: 'mock-refresh-token',
+          IdToken: 'mock-id-token',
+          ExpiresIn: 3600,
+        },
+      });
     }),
   })),
   AdminCreateUserCommand: jest.fn(),
@@ -27,6 +53,7 @@ jest.mock('@aws-sdk/client-cognito-identity-provider', () => ({
   ConfirmForgotPasswordCommand: jest.fn(),
   GlobalSignOutCommand: jest.fn(),
   RespondToAuthChallengeCommand: jest.fn(),
+  GetUserCommand: jest.fn(),
 }));
 
 jest.mock('jsonwebtoken', () => ({
@@ -198,6 +225,7 @@ describe('Authentication API', () => {
         .post('/api/auth/refresh')
         .send({
           refreshToken: 'valid-refresh-token',
+          email: 'test@example.com',
         });
 
       expect(response.status).toBe(200);

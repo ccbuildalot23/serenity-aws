@@ -6,7 +6,9 @@
       "Bash(git push:*)",
       "Bash(git add:*)",
       "Bash(gh run list:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "WebSearch",
+      "Bash(npm run test:*)"
     ],
     "deny": [],
     "ask": []

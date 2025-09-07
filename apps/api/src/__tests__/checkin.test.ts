@@ -9,9 +9,20 @@ jest.mock('../services/auth.service', () => ({
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'No token provided' });
       }
+      
+      const token = authHeader.replace('Bearer ', '');
+      // Different users for different tokens
+      let userId = 'test-user-id';
+      let email = 'test@example.com';
+      
+      if (token === 'new-user-token') {
+        userId = 'new-user-id';
+        email = 'newuser@example.com';
+      }
+      
       req.user = {
-        id: 'test-user-id',
-        email: 'test@example.com',
+        id: userId,
+        email: email,
         role: 'PATIENT',
         tenantId: 'test-tenant',
       };
