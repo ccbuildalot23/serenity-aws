@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "test": "jest",
     "test:unit": "jest --coverage",
+    "test:integration": "echo 'No integration tests for web-phase2 yet'",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

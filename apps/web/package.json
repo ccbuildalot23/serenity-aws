@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --coverage",
     "test:unit": "jest --coverage",
+    "test:integration": "echo 'No integration tests for legacy web app'",
     "test:e2e": "playwright test"
   },
   "dependencies": {
