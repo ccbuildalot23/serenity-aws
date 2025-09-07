@@ -189,12 +189,20 @@ jobs:
           cd apps/api
           pnpm run build
           
-      - name: Build Web App
+      - name: Build Legacy Web App  
         run: |
           cd apps/web
           pnpm run build
         env:
           VITE_API_URL: ${{ secrets.API_URL }}
+          
+      - name: Build Web Phase 2 App
+        run: |
+          cd apps/web-phase2
+          pnpm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL || 'http://localhost:3001' }}
+          NEXT_PUBLIC_AWS_REGION: us-east-1
           
       - name: Upload API artifact
         uses: actions/upload-artifact@v3
@@ -202,11 +210,17 @@ jobs:
           name: api-build
           path: apps/api/dist
           
-      - name: Upload Web artifact
+      - name: Upload Legacy Web artifact
         uses: actions/upload-artifact@v3
         with:
           name: web-build
           path: apps/web/dist
+          
+      - name: Upload Web Phase 2 artifact  
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-phase2-build
+          path: apps/web-phase2/.next
 
   deploy-dev:
     name: Deploy to Development
