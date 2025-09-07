@@ -4,7 +4,8 @@
       "Bash(pnpm:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(gh run list:*)"
     ],
     "deny": [],
     "ask": []
