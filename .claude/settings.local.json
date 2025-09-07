@@ -9,7 +9,9 @@
       "Bash(gh run view:*)",
       "WebSearch",
       "Bash(npm run test:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck:*)"
     ],
     "deny": [],
     "ask": []
