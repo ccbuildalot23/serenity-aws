@@ -1,0 +1,184 @@
+# =============================================================================
+# HIPAA-Compliant Git Attributes Configuration
+# Serenity AWS Mental Health Platform
+# Ensures consistent line endings and file handling across enterprise development
+# =============================================================================
+
+# Auto detect text files and perform LF normalization for enterprise consistency
+* text=auto eol=lf
+
+# =============================================================================
+# SOURCE CODE FILES - Enforce LF for cross-platform development
+# =============================================================================
+
+# JavaScript/TypeScript files
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+
+# JSON and configuration files
+*.json text eol=lf
+*.jsonc text eol=lf
+
+# Web technologies
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+
+# Documentation (HIPAA compliance docs)
+*.md text eol=lf
+*.mdx text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# Configuration files (Infrastructure as Code)
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+
+# Shell scripts and AWS CDK
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.fish text eol=lf
+
+# Docker and container files
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# =============================================================================
+# BINARY FILES - Never modify these files
+# =============================================================================
+
+# Images
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.webp binary
+
+# Fonts
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Archives and packages
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+*.jar binary
+
+# Executables
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# =============================================================================
+# HIPAA SECURITY SENSITIVE FILES - Special handling
+# =============================================================================
+
+# Private keys and certificates (should not be in repo but enforced)
+*.pem binary
+*.key binary
+*.crt binary
+*.p12 binary
+*.pfx binary
+
+# Environment files (should be .gitignored but double protection)
+.env* text eol=lf
+*.env text eol=lf
+
+# =============================================================================
+# LANGUAGE SPECIFIC SETTINGS
+# =============================================================================
+
+# SQL files (database migrations)
+*.sql text eol=lf
+
+# Python (if used for data processing)
+*.py text eol=lf
+*.pyw text eol=lf
+
+# Node.js and package managers
+package.json text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+pnpm-lock.yaml text eol=lf
+
+# Terraform (AWS infrastructure)
+*.tf text eol=lf
+*.tfvars text eol=lf
+
+# =============================================================================
+# MONOREPO WORKSPACE SPECIFIC
+# =============================================================================
+
+# Turbo configuration
+turbo.json text eol=lf
+
+# Workspace configuration
+workspace.json text eol=lf
+nx.json text eol=lf
+
+# Lerna configuration
+lerna.json text eol=lf
+
+# =============================================================================
+# CI/CD AND ENTERPRISE TOOLS
+# =============================================================================
+
+# GitHub workflows and actions
+.github/**/* text eol=lf
+
+# AWS CodeBuild and deployment
+buildspec*.yml text eol=lf
+
+# Enterprise quality gates
+.eslintrc* text eol=lf
+.prettierrc* text eol=lf
+jest.config.* text eol=lf
+tsconfig*.json text eol=lf
+
+# =============================================================================
+# EXPORT IGNORE (Files not needed in exports)
+# =============================================================================
+
+# Development and CI files
+.gitattributes export-ignore
+.gitignore export-ignore
+.github/ export-ignore
+.vscode/ export-ignore
+.idea/ export-ignore
+
+# Test files
+**/*.test.* export-ignore
+**/*.spec.* export-ignore
+**/test/ export-ignore
+**/tests/ export-ignore
+**/__tests__/ export-ignore
+
+# Documentation that doesn't go to production
+docs/ export-ignore
+README.md export-ignore
+CONTRIBUTING.md export-ignore
+
+# =============================================================================
+# HIPAA AUDIT TRAIL ENFORCEMENT
+# All changes to this file require HIPAA compliance review
+# =============================================================================

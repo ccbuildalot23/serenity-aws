@@ -1,0 +1,205 @@
+# =============================================================================
+# Enterprise EditorConfig Configuration
+# Serenity AWS HIPAA-Compliant Mental Health Platform
+# Ensures consistent coding styles across all development tools and team members
+# =============================================================================
+
+# Top-most EditorConfig file
+root = true
+
+# =============================================================================
+# DEFAULT SETTINGS - Applied to all files
+# =============================================================================
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# JAVASCRIPT/TYPESCRIPT ECOSYSTEM
+# =============================================================================
+
+# Main application files
+[*.{js,jsx,ts,tsx,mjs,cjs}]
+indent_style = space
+indent_size = 2
+max_line_length = 100
+quote_type = single
+
+# TypeScript configuration files
+[*.{json,jsonc}]
+indent_style = space
+indent_size = 2
+
+# Package management files
+[{package.json,package-lock.json,yarn.lock,pnpm-lock.yaml}]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# WEB TECHNOLOGIES
+# =============================================================================
+
+# HTML files
+[*.{html,htm}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# CSS and preprocessors
+[*.{css,scss,sass,less}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# =============================================================================
+# CONFIGURATION FILES
+# =============================================================================
+
+# YAML files (AWS, Docker, CI/CD)
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# TOML files
+[*.toml]
+indent_style = space
+indent_size = 2
+
+# INI and configuration files
+[*.{ini,cfg,conf}]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# DOCUMENTATION AND MARKDOWN
+# =============================================================================
+
+# Markdown files (including HIPAA compliance docs)
+[*.{md,mdx}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+trim_trailing_whitespace = false  # Preserve markdown formatting
+
+# Plain text files
+[*.txt]
+max_line_length = 80
+
+# =============================================================================
+# SHELL SCRIPTS AND UNIX FILES
+# =============================================================================
+
+# Shell scripts
+[*.{sh,bash,zsh,fish}]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+
+# =============================================================================
+# INFRASTRUCTURE AS CODE
+# =============================================================================
+
+# Terraform files
+[*.{tf,tfvars}]
+indent_style = space
+indent_size = 2
+
+# Docker files
+[{Dockerfile,*.dockerfile}]
+indent_style = space
+indent_size = 2
+
+# Docker Compose
+[docker-compose*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# DATABASE FILES
+# =============================================================================
+
+# SQL files (migrations, schemas)
+[*.sql]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# =============================================================================
+# MONOREPO SPECIFIC CONFIGURATIONS
+# =============================================================================
+
+# Turbo configuration
+[turbo.json]
+indent_style = space
+indent_size = 2
+
+# Workspace configuration
+[{workspace.json,nx.json,lerna.json}]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# ENTERPRISE QUALITY GATES
+# =============================================================================
+
+# ESLint configuration
+[.eslintrc*]
+indent_style = space
+indent_size = 2
+
+# Prettier configuration
+[.prettierrc*]
+indent_style = space
+indent_size = 2
+
+# Jest configuration
+[jest.config.*]
+indent_style = space
+indent_size = 2
+
+# TypeScript configuration
+[tsconfig*.json]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# CI/CD PIPELINE FILES
+# =============================================================================
+
+# GitHub Actions
+[.github/**/*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# AWS CodeBuild
+[buildspec*.yml]
+indent_style = space
+indent_size = 2
+
+# =============================================================================
+# SPECIAL FILE HANDLING
+# =============================================================================
+
+# Environment files (should be .gitignored but standardized)
+[.env*]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+
+# Makefiles require tabs
+[{Makefile,makefile,*.mk}]
+indent_style = tab
+indent_size = 4
+
+# =============================================================================
+# HIPAA COMPLIANCE NOTES
+# - All settings ensure consistent code formatting for audit trail integrity
+# - Line ending consistency prevents git diff noise in compliance reviews
+# - Standardized indentation improves code review quality for security audits
+# - Maximum line lengths ensure readable code in compliance documentation
+# =============================================================================
