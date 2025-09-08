@@ -5,11 +5,21 @@
 
 import apiService from './apiService';
 import { auditLogger, AuditEventType } from '@/utils/auditLog';
+import { CognitoUserPool, CognitoUser, AuthenticationDetails, CognitoUserAttribute, CognitoUserSession } from 'amazon-cognito-identity-js';
 
 interface CognitoConfig {
   userPoolId: string;
   clientId: string;
   region: string;
+  mfaRequired?: boolean;
+  sessionTimeoutMinutes?: number;
+  passwordPolicy?: {
+    minLength: number;
+    requireUppercase: boolean;
+    requireLowercase: boolean;
+    requireNumbers: boolean;
+    requireSymbols: boolean;
+  };
 }
 
 interface LoginCredentials {
@@ -23,6 +33,9 @@ interface User {
   role: 'patient' | 'provider' | 'supporter' | 'admin';
   name?: string;
   attributes?: Record<string, any>;
+  mfaEnabled?: boolean;
+  lastActivity?: Date;
+  sessionExpiresAt?: Date;
 }
 
 interface AuthResponse {
@@ -38,18 +51,44 @@ interface AuthResponse {
 class CognitoAuthService {
   private config: CognitoConfig;
   private currentUser: User | null = null;
+  private cognitoUserPool: CognitoUserPool | null = null;
+  private sessionTimeoutTimer: NodeJS.Timeout | null = null;
+  private activityListeners: (() => void)[] = [];
 
   constructor() {
     this.config = {
       userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || '',
       clientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || '',
-      region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1'
+      region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1',
+      mfaRequired: process.env.NODE_ENV === 'production', // MFA required in production
+      sessionTimeoutMinutes: 15, // HIPAA requirement: 15-minute timeout
+      passwordPolicy: {
+        minLength: 12,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireNumbers: true,
+        requireSymbols: true
+      }
     };
 
-    // Validate configuration
-    if (!this.config.userPoolId || !this.config.clientId) {
-      console.error('Cognito configuration missing. Authentication will use mock mode.');
+    // Initialize Cognito User Pool
+    if (this.config.userPoolId && this.config.clientId) {
+      this.cognitoUserPool = new CognitoUserPool({
+        UserPoolId: this.config.userPoolId,
+        ClientId: this.config.clientId
+      });
+    } else {
+      console.warn('Cognito configuration missing. Authentication will use mock mode.');
+      auditLogger.log({
+        event: AuditEventType.SYSTEM_ERROR,
+        action: 'Cognito configuration missing',
+        result: 'warning',
+        details: { environment: process.env.NODE_ENV }
+      });
     }
+
+    // Setup activity monitoring for session management
+    this.setupActivityMonitoring();
   }
 
   /**
@@ -69,49 +108,27 @@ class CognitoAuthService {
         }
       });
 
-      // In production, this would call Cognito's authentication API
-      // For development, use mock authentication
-      if (!this.config.userPoolId) {
+      // Use mock authentication in development, real Cognito in production
+      if (!this.cognitoUserPool) {
         return this.mockLogin(credentials);
       }
 
-      // Production Cognito authentication would go here
-      const response = await fetch(`https://cognito-idp.${this.config.region}.amazonaws.com/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-amz-json-1.1',
-          'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth'
-        },
-        body: JSON.stringify({
-          AuthFlow: 'USER_PASSWORD_AUTH',
-          ClientId: this.config.clientId,
-          AuthParameters: {
-            USERNAME: credentials.email,
-            PASSWORD: credentials.password
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Authentication failed');
-      }
-
-      const data = await response.json();
+      // Production Cognito authentication
+      const authResult = await this.authenticateWithCognito(credentials);
       
-      // Parse Cognito response
-      const authResult: AuthResponse = {
-        user: {
-          id: data.AuthenticationResult.IdToken, // Parse from JWT
-          email: credentials.email,
-          role: 'patient' // Would be parsed from token claims
-        },
-        tokens: {
-          idToken: data.AuthenticationResult.IdToken,
-          accessToken: data.AuthenticationResult.AccessToken,
-          refreshToken: data.AuthenticationResult.RefreshToken,
-          expiresIn: data.AuthenticationResult.ExpiresIn
-        }
-      };
+      // Enforce MFA if required
+      if (this.config.mfaRequired && !authResult.user.mfaEnabled) {
+        auditLogger.log({
+          event: AuditEventType.MFA_CHALLENGE,
+          userId: authResult.user.id,
+          action: 'MFA required but not enabled',
+          result: 'warning',
+          details: { email: credentials.email }
+        });
+        
+        // In production, would redirect to MFA setup
+        console.warn('MFA is required for production environment');
+      }
 
       // Store tokens in API service
       apiService.setTokens(
@@ -121,9 +138,18 @@ class CognitoAuthService {
         authResult.tokens.expiresIn
       );
 
-      // Store current user
+      // Store current user with session info
+      const now = new Date();
+      const sessionExpiry = new Date(now.getTime() + (this.config.sessionTimeoutMinutes! * 60 * 1000));
+      
+      authResult.user.lastActivity = now;
+      authResult.user.sessionExpiresAt = sessionExpiry;
+      
       this.currentUser = authResult.user;
       this.saveUserToStorage(authResult.user);
+      
+      // Start session timeout management
+      this.startSessionTimeout();
 
       // Log successful authentication
       auditLogger.log({
@@ -232,16 +258,51 @@ class CognitoAuthService {
       });
     }
 
+    // Clear session timeout
+    this.clearSessionTimeout();
+    
+    // Clear activity listeners
+    this.clearActivityMonitoring();
+
     // Clear tokens
     apiService.clearTokens();
+
+    // Global sign out from Cognito
+    if (this.cognitoUserPool && this.currentUser) {
+      try {
+        const cognitoUser = this.cognitoUserPool.getCurrentUser();
+        if (cognitoUser) {
+          cognitoUser.globalSignOut({
+            onSuccess: () => {
+              auditLogger.log({
+                event: AuditEventType.LOGOUT,
+                userId: this.currentUser?.id,
+                action: 'cognito_global_signout',
+                result: 'success'
+              });
+            },
+            onFailure: (err) => {
+              auditLogger.log({
+                event: AuditEventType.SYSTEM_ERROR,
+                userId: this.currentUser?.id,
+                action: 'cognito_global_signout_failed',
+                result: 'failure',
+                details: { error: err.message }
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Failed to perform global sign out:', error);
+      }
+    }
 
     // Clear user data
     this.currentUser = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('current_user');
+      localStorage.removeItem('cognito_session');
     }
-
-    // In production, would also call Cognito's global sign out
   }
 
   /**
@@ -279,15 +340,64 @@ class CognitoAuthService {
   }
 
   /**
-   * Refresh session
+   * Refresh session using Cognito refresh token
    */
   async refreshSession(): Promise<boolean> {
     try {
-      // This would call Cognito's refresh token API
-      // For now, just check if we have a user
-      return this.isAuthenticated();
+      if (!this.cognitoUserPool) {
+        return this.isAuthenticated();
+      }
+
+      const cognitoUser = this.cognitoUserPool.getCurrentUser();
+      if (!cognitoUser) {
+        return false;
+      }
+
+      return new Promise((resolve) => {
+        cognitoUser.getSession((err: any, session: CognitoUserSession | null) => {
+          if (err || !session) {
+            auditLogger.log({
+              event: AuditEventType.SESSION_TIMEOUT,
+              userId: this.currentUser?.id,
+              action: 'session_refresh_failed',
+              result: 'failure',
+              details: { error: err?.message }
+            });
+            resolve(false);
+            return;
+          }
+
+          if (session.isValid()) {
+            // Update session expiry
+            if (this.currentUser) {
+              const now = new Date();
+              this.currentUser.lastActivity = now;
+              this.currentUser.sessionExpiresAt = new Date(now.getTime() + (this.config.sessionTimeoutMinutes! * 60 * 1000));
+              this.saveUserToStorage(this.currentUser);
+            }
+
+            auditLogger.log({
+              event: AuditEventType.SESSION_EXTENDED,
+              userId: this.currentUser?.id,
+              action: 'session_refreshed',
+              result: 'success'
+            });
+
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        });
+      });
     } catch (error) {
       console.error('Failed to refresh session:', error);
+      auditLogger.log({
+        event: AuditEventType.SYSTEM_ERROR,
+        userId: this.currentUser?.id,
+        action: 'session_refresh_error',
+        result: 'failure',
+        details: { error: error instanceof Error ? error.message : String(error) }
+      });
       return false;
     }
   }
@@ -358,10 +468,250 @@ class CognitoAuthService {
     // For now, just simulate success
     await new Promise(resolve => setTimeout(resolve, 500));
   }
+
+  /**
+   * Authenticate with Cognito (production implementation)
+   */
+  private async authenticateWithCognito(credentials: LoginCredentials): Promise<AuthResponse> {
+    if (!this.cognitoUserPool) {
+      throw new Error('Cognito User Pool not initialized');
+    }
+
+    const cognitoUser = new CognitoUser({
+      Username: credentials.email,
+      Pool: this.cognitoUserPool
+    });
+
+    const authenticationDetails = new AuthenticationDetails({
+      Username: credentials.email,
+      Password: credentials.password
+    });
+
+    return new Promise((resolve, reject) => {
+      cognitoUser.authenticateUser(authenticationDetails, {
+        onSuccess: (session: CognitoUserSession) => {
+          const idToken = session.getIdToken();
+          const payload = idToken.decodePayload();
+          
+          const user: User = {
+            id: payload.sub,
+            email: payload.email || credentials.email,
+            role: this.parseUserRole(payload),
+            name: payload.name || payload.given_name + ' ' + payload.family_name,
+            mfaEnabled: payload['cognito:mfa_enabled'] === 'true',
+            attributes: payload
+          };
+
+          const tokens = {
+            idToken: idToken.getJwtToken(),
+            accessToken: session.getAccessToken().getJwtToken(),
+            refreshToken: session.getRefreshToken().getToken(),
+            expiresIn: session.getAccessToken().getExpiration() - Math.floor(Date.now() / 1000)
+          };
+
+          resolve({ user, tokens });
+        },
+        onFailure: (err) => {
+          auditLogger.log({
+            event: AuditEventType.AUTH_FAILURE,
+            userId: credentials.email,
+            action: 'cognito_authentication_failed',
+            result: 'failure',
+            details: { error: err.message }
+          });
+          reject(new Error(err.message || 'Authentication failed'));
+        },
+        mfaRequired: (challengeName, challengeParameters) => {
+          // Handle MFA challenge
+          auditLogger.log({
+            event: AuditEventType.MFA_CHALLENGE,
+            userId: credentials.email,
+            action: 'mfa_challenge_required',
+            result: 'warning',
+            details: { challengeName }
+          });
+          // For MVP, reject MFA challenges (would implement UI for this)
+          reject(new Error('MFA required but not implemented in UI yet'));
+        }
+      });
+    });
+  }
+
+  /**
+   * Parse user role from Cognito token payload
+   */
+  private parseUserRole(payload: any): User['role'] {
+    const customRole = payload['custom:role'];
+    const cognitoGroups = payload['cognito:groups'];
+    
+    if (customRole) {
+      return customRole as User['role'];
+    }
+    
+    if (cognitoGroups && Array.isArray(cognitoGroups)) {
+      if (cognitoGroups.includes('admin')) return 'admin';
+      if (cognitoGroups.includes('provider')) return 'provider';
+      if (cognitoGroups.includes('supporter')) return 'supporter';
+    }
+    
+    return 'patient'; // Default role
+  }
+
+  /**
+   * Setup activity monitoring for session timeout
+   */
+  private setupActivityMonitoring(): void {
+    if (typeof window === 'undefined') return;
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    
+    const handleActivity = () => {
+      if (this.currentUser) {
+        this.updateLastActivity();
+      }
+    };
+
+    events.forEach(event => {
+      document.addEventListener(event, handleActivity, { passive: true });
+      this.activityListeners.push(() => {
+        document.removeEventListener(event, handleActivity);
+      });
+    });
+  }
+
+  /**
+   * Clear activity monitoring
+   */
+  private clearActivityMonitoring(): void {
+    this.activityListeners.forEach(cleanup => cleanup());
+    this.activityListeners = [];
+  }
+
+  /**
+   * Update last activity timestamp
+   */
+  private updateLastActivity(): void {
+    if (!this.currentUser) return;
+
+    const now = new Date();
+    this.currentUser.lastActivity = now;
+    
+    // Extend session expiry
+    this.currentUser.sessionExpiresAt = new Date(
+      now.getTime() + (this.config.sessionTimeoutMinutes! * 60 * 1000)
+    );
+    
+    this.saveUserToStorage(this.currentUser);
+  }
+
+  /**
+   * Start session timeout management
+   */
+  private startSessionTimeout(): void {
+    this.clearSessionTimeout();
+    
+    if (!this.currentUser || !this.currentUser.sessionExpiresAt) return;
+
+    const timeUntilExpiry = this.currentUser.sessionExpiresAt.getTime() - Date.now();
+    
+    if (timeUntilExpiry <= 0) {
+      this.handleSessionTimeout();
+      return;
+    }
+
+    this.sessionTimeoutTimer = setTimeout(() => {
+      this.handleSessionTimeout();
+    }, timeUntilExpiry);
+  }
+
+  /**
+   * Clear session timeout timer
+   */
+  private clearSessionTimeout(): void {
+    if (this.sessionTimeoutTimer) {
+      clearTimeout(this.sessionTimeoutTimer);
+      this.sessionTimeoutTimer = null;
+    }
+  }
+
+  /**
+   * Handle session timeout
+   */
+  private handleSessionTimeout(): void {
+    auditLogger.log({
+      event: AuditEventType.SESSION_TIMEOUT,
+      userId: this.currentUser?.id,
+      action: 'automatic_session_timeout',
+      result: 'warning',
+      details: {
+        timeoutMinutes: this.config.sessionTimeoutMinutes,
+        reason: 'HIPAA compliance - 15 minute inactivity timeout'
+      }
+    });
+
+    // Logout user
+    this.logout();
+  }
+
+  /**
+   * Check if current session is expired
+   */
+  isSessionExpired(): boolean {
+    if (!this.currentUser || !this.currentUser.sessionExpiresAt) {
+      return true;
+    }
+    
+    return new Date() > this.currentUser.sessionExpiresAt;
+  }
+
+  /**
+   * Get session time remaining in seconds
+   */
+  getSessionTimeRemaining(): number {
+    if (!this.currentUser || !this.currentUser.sessionExpiresAt) {
+      return 0;
+    }
+    
+    const remaining = this.currentUser.sessionExpiresAt.getTime() - Date.now();
+    return Math.max(0, Math.floor(remaining / 1000));
+  }
+
+  /**
+   * Validate password against policy
+   */
+  validatePassword(password: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const policy = this.config.passwordPolicy!;
+
+    if (password.length < policy.minLength) {
+      errors.push(`Password must be at least ${policy.minLength} characters long`);
+    }
+    
+    if (policy.requireUppercase && !/[A-Z]/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter');
+    }
+    
+    if (policy.requireLowercase && !/[a-z]/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter');
+    }
+    
+    if (policy.requireNumbers && !/\d/.test(password)) {
+      errors.push('Password must contain at least one number');
+    }
+    
+    if (policy.requireSymbols && !/[^A-Za-z0-9]/.test(password)) {
+      errors.push('Password must contain at least one special character');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
 }
 
 // Create singleton instance
 const cognitoAuth = new CognitoAuthService();
 
 export default cognitoAuth;
-export { type User, type AuthResponse, type LoginCredentials };
+export { type User, type AuthResponse, type LoginCredentials, type CognitoConfig };

@@ -1,490 +1,248 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Smile, 
-  Frown, 
-  Meh, 
+  CheckCircle, 
   AlertCircle, 
-  Moon, 
   Activity,
   Heart,
-  Brain,
-  CheckCircle
+  Moon,
+  ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 
-const moodEmojis = [
-  { value: 1, emoji: '😢', label: 'Very Low' },
-  { value: 2, emoji: '😔', label: 'Low' },
-  { value: 3, emoji: '😐', label: 'Slightly Low' },
-  { value: 4, emoji: '😊', label: 'Okay' },
-  { value: 5, emoji: '😌', label: 'Good' },
-  { value: 6, emoji: '😃', label: 'Very Good' },
-  { value: 7, emoji: '😄', label: 'Great' },
-  { value: 8, emoji: '🥰', label: 'Excellent' },
-  { value: 9, emoji: '🤗', label: 'Amazing' },
-  { value: 10, emoji: '🎉', label: 'Perfect' },
-];
-
-const triggers = [
-  'Work stress',
-  'Family issues',
-  'Financial concerns',
-  'Health problems',
-  'Relationship issues',
-  'Isolation',
-  'Boredom',
-  'Cravings',
-  'Social situations',
-  'Negative thoughts',
-];
-
-const copingStrategies = [
-  'Deep breathing',
-  'Meditation',
-  'Exercise',
-  'Called a friend',
-  'Journaling',
-  'Music',
-  'Nature walk',
-  'Reading',
-  'Therapy techniques',
-  'Support group',
-];
-
+// PRD Requirement: Two-tap check-in system (≤3 taps, <10 seconds)
 export default function DailyCheckInPage() {
   const router = useRouter();
-  const { setLastCheckIn, setCheckInStreak } = useStore();
-  const [step, setStep] = useState(1);
+  const { setLastCheckIn, setCheckInStreak, lastCheckIn } = useStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Simple check-in data with defaults to minimize taps
   const [checkInData, setCheckInData] = useState({
-    mood: 5,
-    anxiety: 5,
-    sleepHours: 7,
-    sleepQuality: 5,
-    medication: false,
-    exercise: false,
-    socialInteraction: false,
-    substanceUse: false,
-    cravingIntensity: 0,
-    triggers: [] as string[],
-    copingStrategiesUsed: [] as string[],
-    gratitude: '',
-    notes: '',
-    supportNeeded: false,
-    crisisFlag: false,
+    mood: 5,      // Default to neutral, user can adjust
+    anxiety: 5,   // Default to neutral, user can adjust  
+    sleep: 5,     // Default to neutral, user can adjust
+    notes: '',    // Optional - doesn't count toward tap limit
   });
 
-  const handleNext = () => {
-    if (step < 5) setStep(step + 1);
-  };
+  // Load previous entry to minimize effort (PRD requirement)
+  useEffect(() => {
+    const loadPreviousEntry = () => {
+      try {
+        const stored = localStorage.getItem('serenity_last_checkin_values');
+        if (stored) {
+          const previous = JSON.parse(stored);
+          setCheckInData(prev => ({
+            ...prev,
+            mood: previous.mood || 5,
+            anxiety: previous.anxiety || 5,
+            sleep: previous.sleep || 5,
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load previous check-in values:', error);
+      }
+    };
+    
+    loadPreviousEntry();
+  }, []);
 
-  const handlePrevious = () => {
-    if (step > 1) setStep(step - 1);
-  };
-
-  const handleToggleTrigger = (trigger: string) => {
-    setCheckInData(prev => ({
-      ...prev,
-      triggers: prev.triggers.includes(trigger)
-        ? prev.triggers.filter(t => t !== trigger)
-        : [...prev.triggers, trigger],
-    }));
-  };
-
-  const handleToggleCoping = (strategy: string) => {
-    setCheckInData(prev => ({
-      ...prev,
-      copingStrategiesUsed: prev.copingStrategiesUsed.includes(strategy)
-        ? prev.copingStrategiesUsed.filter(s => s !== strategy)
-        : [...prev.copingStrategiesUsed, strategy],
-    }));
+  // Save current values for next time (PRD requirement: defaults to last entry)
+  const saveCurrentValues = () => {
+    try {
+      localStorage.setItem('serenity_last_checkin_values', JSON.stringify({
+        mood: checkInData.mood,
+        anxiety: checkInData.anxiety,
+        sleep: checkInData.sleep,
+      }));
+    } catch (error) {
+      console.error('Failed to save check-in values:', error);
+    }
   };
 
   const handleSubmit = async () => {
+    // PRD Requirement: Submit in <10 seconds with ≤3 taps
     setIsSubmitting(true);
+    
     try {
-      const response = await apiClient.submitCheckIn(checkInData);
+      // Save values for next check-in
+      saveCurrentValues();
+      
+      // Submit check-in data
+      const response = await apiClient.submitCheckIn({
+        mood_score: checkInData.mood,
+        anxiety_level: checkInData.anxiety,
+        sleep_quality: checkInData.sleep,
+        notes: checkInData.notes || null,
+        created_at: new Date().toISOString(),
+      });
       
       if (response.data.success) {
         setLastCheckIn(new Date());
         setCheckInStreak(response.data.insights?.streakDays || 1);
         
-        toast.success(response.data.message || 'Check-in completed successfully!');
+        // PRD Requirement: Display streak and summary stats after submission
+        toast.success(
+          `Check-in completed! 🎉 Streak: ${response.data.insights?.streakDays || 1} days`,
+          { duration: 3000 }
+        );
         
-        // Check for crisis flags
+        // Check for crisis flags (PRD requirement: crisis responsiveness)
         if (response.data.insights?.riskLevel === 'high' || response.data.insights?.riskLevel === 'critical') {
           toast.error('We noticed you might need extra support. Help is available.', {
             duration: 10000,
+            action: {
+              label: 'Get Support',
+              onClick: () => router.push('/patient/support'),
+            },
           });
         }
         
-        router.push('/patient/dashboard');
+        // Navigate to home to show insights
+        router.push('/patient');
       }
     } catch (error) {
       console.error('Check-in error:', error);
-      toast.error('Failed to submit check-in. Please try again.');
+      // PRD Requirement: Input validation - return 400 with errors  
+      const errorMessage = error?.response?.status === 400 
+        ? 'Please check your inputs and try again.'
+        : 'Failed to submit check-in. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderStepContent = () => {
-    switch (step) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">How are you feeling today?</h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-3">Overall Mood</label>
-              <div className="grid grid-cols-5 gap-2">
-                {moodEmojis.map((mood) => (
-                  <button
-                    key={mood.value}
-                    onClick={() => setCheckInData(prev => ({ ...prev, mood: mood.value }))}
-                    className={cn(
-                      'p-3 rounded-lg border-2 transition-all',
-                      checkInData.mood === mood.value
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    )}
-                  >
-                    <div className="text-2xl">{mood.emoji}</div>
-                    <div className="text-xs mt-1">{mood.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Anxiety Level (1-10)
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={checkInData.anxiety}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, anxiety: parseInt(e.target.value) }))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-sm text-gray-500 mt-1">
-                <span>Low</span>
-                <span className="font-bold text-lg">{checkInData.anxiety}</span>
-                <span>High</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Craving Intensity (0-10)
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                value={checkInData.cravingIntensity}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, cravingIntensity: parseInt(e.target.value) }))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-sm text-gray-500 mt-1">
-                <span>None</span>
-                <span className="font-bold text-lg">{checkInData.cravingIntensity}</span>
-                <span>Intense</span>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Sleep & Self-Care</h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Hours of Sleep
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="24"
-                step="0.5"
-                value={checkInData.sleepHours}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, sleepHours: parseFloat(e.target.value) }))}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Sleep Quality (1-10)
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={checkInData.sleepQuality}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, sleepQuality: parseInt(e.target.value) }))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-sm text-gray-500 mt-1">
-                <span>Poor</span>
-                <span className="font-bold text-lg">{checkInData.sleepQuality}</span>
-                <span>Excellent</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm font-medium">Today I...</label>
-              
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={checkInData.medication}
-                  onChange={(e) => setCheckInData(prev => ({ ...prev, medication: e.target.checked }))}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
-                />
-                <span>Took my medication as prescribed</span>
-              </label>
-
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={checkInData.exercise}
-                  onChange={(e) => setCheckInData(prev => ({ ...prev, exercise: e.target.checked }))}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
-                />
-                <span>Exercised or moved my body</span>
-              </label>
-
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={checkInData.socialInteraction}
-                  onChange={(e) => setCheckInData(prev => ({ ...prev, socialInteraction: e.target.checked }))}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
-                />
-                <span>Had positive social interaction</span>
-              </label>
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Triggers & Challenges</h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                What triggered difficult feelings today?
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {triggers.map((trigger) => (
-                  <button
-                    key={trigger}
-                    onClick={() => handleToggleTrigger(trigger)}
-                    className={cn(
-                      'p-2 text-sm rounded-lg border transition-all',
-                      checkInData.triggers.includes(trigger)
-                        ? 'border-purple-500 bg-purple-50 text-purple-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    )}
-                  >
-                    {trigger}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={checkInData.substanceUse}
-                  onChange={(e) => setCheckInData(prev => ({ ...prev, substanceUse: e.target.checked }))}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
-                />
-                <span>I used substances today</span>
-              </label>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={checkInData.supportNeeded}
-                  onChange={(e) => setCheckInData(prev => ({ ...prev, supportNeeded: e.target.checked }))}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
-                />
-                <span>I could use some extra support today</span>
-              </label>
-            </div>
-          </div>
-        );
-
-      case 4:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Coping & Growth</h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Coping strategies I used today
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {copingStrategies.map((strategy) => (
-                  <button
-                    key={strategy}
-                    onClick={() => handleToggleCoping(strategy)}
-                    className={cn(
-                      'p-2 text-sm rounded-lg border transition-all',
-                      checkInData.copingStrategiesUsed.includes(strategy)
-                        ? 'border-green-500 bg-green-50 text-green-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    )}
-                  >
-                    {strategy}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Something I'm grateful for today
-              </label>
-              <textarea
-                value={checkInData.gratitude}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, gratitude: e.target.value }))}
-                placeholder="What brought you joy or peace today?"
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Additional Notes</h2>
-            
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Anything else you'd like to share?
-              </label>
-              <textarea
-                value={checkInData.notes}
-                onChange={(e) => setCheckInData(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Any thoughts, feelings, or experiences you want to record..."
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                rows={6}
-              />
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-yellow-600 mt-1" size={20} />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800">
-                    Need immediate support?
-                  </p>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    If you're experiencing a crisis or having thoughts of self-harm, 
-                    please reach out for help immediately.
-                  </p>
-                  <button
-                    onClick={() => setCheckInData(prev => ({ ...prev, crisisFlag: true }))}
-                    className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-                  >
-                    Request Crisis Support
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm text-gray-500">Step {step} of 5</span>
-            <span className="text-sm text-gray-500">{Math.round((step / 5) * 100)}% Complete</span>
+    <div className="max-w-md mx-auto p-4">
+      {/* PRD: Two-tap check-in system - simple, fast interface */}
+      <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Daily Check-in</h1>
+          <p className="text-sm text-gray-600">How are you feeling today?</p>
+        </div>
+
+        {/* Mood - Tap 1 (can be skipped if using defaults) */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Heart className="text-purple-500" size={20} />
+            <label className="text-sm font-medium">Mood</label>
+            <span className="text-lg font-bold text-purple-600">{checkInData.mood}</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(step / 5) * 100}%` }}
-            />
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={checkInData.mood}
+            onChange={(e) => setCheckInData(prev => ({ ...prev, mood: parseInt(e.target.value) }))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Low</span>
+            <span>High</span>
           </div>
         </div>
 
-        {/* Step Content */}
-        {renderStepContent()}
+        {/* Anxiety - Quick adjustment */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Activity className="text-orange-500" size={20} />
+            <label className="text-sm font-medium">Anxiety</label>
+            <span className="text-lg font-bold text-orange-600">{checkInData.anxiety}</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={checkInData.anxiety}
+            onChange={(e) => setCheckInData(prev => ({ ...prev, anxiety: parseInt(e.target.value) }))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Low</span>
+            <span>High</span>
+          </div>
+        </div>
 
-        {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8">
+        {/* Sleep - Quick adjustment */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Moon className="text-blue-500" size={20} />
+            <label className="text-sm font-medium">Sleep Quality</label>
+            <span className="text-lg font-bold text-blue-600">{checkInData.sleep}</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={checkInData.sleep}
+            onChange={(e) => setCheckInData(prev => ({ ...prev, sleep: parseInt(e.target.value) }))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Poor</span>
+            <span>Great</span>
+          </div>
+        </div>
+
+        {/* Optional notes - doesn't count toward tap limit */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-700">Notes (optional)</label>
+          <textarea
+            value={checkInData.notes}
+            onChange={(e) => setCheckInData(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Any thoughts you'd like to share..."
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            rows={2}
+          />
+        </div>
+
+        {/* Crisis support - always visible for quick access */}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="text-red-500" size={16} />
+            <span className="text-sm font-medium text-red-800">Need help now?</span>
+          </div>
           <button
-            onClick={handlePrevious}
-            disabled={step === 1}
-            className={cn(
-              'px-6 py-2 rounded-lg transition-colors',
-              step === 1
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            )}
+            onClick={() => router.push('/patient/support')}
+            className="mt-1 text-sm text-red-600 hover:text-red-700 underline"
           >
-            Previous
+            Get crisis support →
           </button>
+        </div>
 
-          {step < 5 ? (
-            <button
-              onClick={handleNext}
-              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className={cn(
-                'px-6 py-2 rounded-lg transition-colors flex items-center gap-2',
-                isSubmitting
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700'
-              )}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={20} />
-                  Complete Check-in
-                </>
-              )}
-            </button>
+        {/* Submit Button - Tap 2 (final tap) */}
+        <button
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+          className={cn(
+            'w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all flex items-center justify-center gap-2',
+            isSubmitting
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
           )}
+        >
+          {isSubmitting ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <CheckCircle size={24} />
+              Complete Check-in
+              <ArrowRight size={20} />
+            </>
+          )}
+        </button>
+
+        {/* PRD Requirement: Show completion time goal */}
+        <div className="text-center text-xs text-gray-500">
+          ⚡ Complete in under 10 seconds
         </div>
       </div>
     </div>

@@ -6,6 +6,10 @@ interface User {
   email: string;
   role: 'patient' | 'provider' | 'supporter' | 'admin';
   name?: string;
+  attributes?: Record<string, any>;
+  mfaEnabled?: boolean;
+  lastActivity?: Date;
+  sessionExpiresAt?: Date;
 }
 
 interface AppState {
@@ -13,6 +17,7 @@ interface AppState {
   user: User | null;
   isAuthenticated: boolean;
   setUser: (user: User | null) => void;
+  clearUser: () => void;
   logout: () => void;
   
   // Check-in state
@@ -47,6 +52,8 @@ export const useStore = create<AppState>()(
 
       // Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
+      
+      clearUser: () => set({ user: null, isAuthenticated: false }),
       
       logout: () => set({ user: null, isAuthenticated: false }),
       
