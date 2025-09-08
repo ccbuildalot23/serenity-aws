@@ -19,10 +19,15 @@ import { toast } from 'sonner';
 export default function DailyCheckInPage(): JSX.Element {
   const router = useRouter();
   const { setLastCheckIn, setCheckInStreak, lastCheckIn } = useStore();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   
   // Simple check-in data with defaults to minimize taps
-  const [checkInData, setCheckInData] = useState({
+  const [checkInData, setCheckInData] = useState<{
+    mood: number;
+    anxiety: number;
+    sleep: number;
+    notes: string;
+  }>({
     mood: 5,      // Default to neutral, user can adjust
     anxiety: 5,   // Default to neutral, user can adjust  
     sleep: 5,     // Default to neutral, user can adjust
@@ -33,7 +38,7 @@ export default function DailyCheckInPage(): JSX.Element {
   useEffect(() => {
     const loadPreviousEntry = () => {
       try {
-        const stored = localStorage.getItem('serenity_last_checkin_values');
+        // PHI data cannot be stored in localStorage - removed for HIPAA compliance
         if (stored) {
           const previous = JSON.parse(stored);
           setCheckInData(prev => ({
@@ -54,7 +59,7 @@ export default function DailyCheckInPage(): JSX.Element {
   // Save current values for next time (PRD requirement: defaults to last entry)
   const saveCurrentValues = (): void => {
     try {
-      localStorage.setItem('serenity_last_checkin_values', JSON.stringify({
+      // PHI data removed from localStorage - HIPAA compliance
         mood: checkInData.mood,
         anxiety: checkInData.anxiety,
         sleep: checkInData.sleep,

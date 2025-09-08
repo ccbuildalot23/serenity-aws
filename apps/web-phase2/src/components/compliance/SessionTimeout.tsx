@@ -26,9 +26,9 @@ export default function SessionTimeout({
   onActivity
 }: SessionTimeoutProps) {
   const { user, logout } = useStore();
-  const [showWarning, setShowWarning] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState(timeoutMinutes * 60);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  const [showWarning, setShowWarning] = useState<boolean>(false);
+  const [timeRemaining, setTimeRemaining] = useState<number>(timeoutMinutes * 60);
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const warningTimeoutRef = useRef<NodeJS.Timeout>();
   const sessionTimeoutRef = useRef<NodeJS.Timeout>();
   const countdownRef = useRef<NodeJS.Timeout>();

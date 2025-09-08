@@ -21,9 +21,12 @@ export default function LoginPage(): JSX.Element {
   const searchParams = useSearchParams();
   const { login, isAuthenticated, validatePassword } = useAuth();
   
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [credentials, setCredentials] = useState({
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [credentials, setCredentials] = useState<{
+    email: string;
+    password: string;
+  }>({
     email: '',
     password: ''
   });

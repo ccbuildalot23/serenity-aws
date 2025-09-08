@@ -62,7 +62,7 @@ const CPT_CODES = {
 export default function ProviderDashboard() {
   const { user } = useStore();
   const [metrics, setMetrics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
 
   useEffect(() => {

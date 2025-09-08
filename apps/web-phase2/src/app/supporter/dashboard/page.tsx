@@ -87,8 +87,13 @@ export default function SupporterDashboard() {
   const { user } = useStore();
   const [alerts, setAlerts] = useState<SupportAlert[]>(mockAlerts);
   const [filter, setFilter] = useState<'all' | 'unacknowledged' | 'critical'>('unacknowledged');
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({
+  const [loading, setLoading] = useState<boolean>(false);
+  const [stats, setStats] = useState<{
+    totalAlerts: number;
+    unacknowledged: number;
+    criticalAlerts: number;
+    avgResponseTime: number;
+  }>({
     totalAlerts: 0,
     unacknowledged: 0,
     criticalAlerts: 0,

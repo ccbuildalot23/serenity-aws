@@ -71,7 +71,7 @@ const assessments: Assessment[] = [
 export default function AssessmentsPage() {
   const { user } = useStore();
   const [assessmentHistory, setAssessmentHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     fetchAssessmentHistory();

@@ -94,8 +94,8 @@ export default function BillingDashboard({
 }: BillingDashboardProps): JSX.Element {
   const [charges, setCharges] = useState<Charge[]>([]);
   const [stats, setStats] = useState<BillingStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [cptFilter, setCptFilter] = useState<string>('all');
 

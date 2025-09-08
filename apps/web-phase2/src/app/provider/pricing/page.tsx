@@ -80,10 +80,10 @@ const PRICING_TIERS = {
 
 export default function PricingSimulator() {
   const [selectedTier, setSelectedTier] = useState<keyof typeof PRICING_TIERS>('practice');
-  const [patientCount, setPatientCount] = useState(50);
-  const [revenuePerPatient, setRevenuePerPatient] = useState(265);
-  const [collectionRate, setCollectionRate] = useState(82);
-  const [showComparison, setShowComparison] = useState(false);
+  const [patientCount, setPatientCount] = useState<number>(50);
+  const [revenuePerPatient, setRevenuePerPatient] = useState<number>(265);
+  const [collectionRate, setCollectionRate] = useState<number>(82);
+  const [showComparison, setShowComparison] = useState<boolean>(false);
 
   // Calculate ROI
   const monthlyRevenue = patientCount * revenuePerPatient * (collectionRate / 100);

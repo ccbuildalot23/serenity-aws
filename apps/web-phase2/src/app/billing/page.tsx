@@ -35,8 +35,8 @@ export default function BillingPage(): JSX.Element {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [editingChargeId, setEditingChargeId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
 
   const handleCreateCharge = () => {
     setEditingChargeId(null);

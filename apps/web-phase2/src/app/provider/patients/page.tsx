@@ -126,10 +126,10 @@ const mockPatients: Patient[] = [
 export default function PatientsPage() {
   const { user } = useStore();
   const [patients, setPatients] = useState<Patient[]>(mockPatients);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterRisk, setFilterRisk] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('name');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Filter and sort patients
   const filteredPatients = patients

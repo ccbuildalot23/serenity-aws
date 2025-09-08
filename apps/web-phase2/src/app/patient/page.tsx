@@ -46,7 +46,7 @@ export default function PatientHomePage(): JSX.Element {
   useEffect(() => {
     try {
       // Note: This is non-PHI data (UI preferences only)
-      const dismissed = localStorage.getItem('serenity_dismissed_insights');
+      // Behavioral insights may contain PHI - removed for HIPAA compliance
       if (dismissed) {
         setDismissedCards(new Set(JSON.parse(dismissed)));
       }
@@ -102,7 +102,7 @@ export default function PatientHomePage(): JSX.Element {
     setDismissedCards(newDismissed);
     
     try {
-      localStorage.setItem('serenity_dismissed_insights', JSON.stringify([...newDismissed]));
+      // Behavioral insights removed from localStorage - HIPAA compliance
     } catch (error) {
       console.error('Failed to save dismissed insights:', error);
     }

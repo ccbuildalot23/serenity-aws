@@ -33,10 +33,10 @@ interface Supporter {
 export default function SupportPage(): JSX.Element {
   const router = useRouter();
   const { user } = useStore();
-  const [isSubmittingCrisis, setIsSubmittingCrisis] = useState(false);
+  const [isSubmittingCrisis, setIsSubmittingCrisis] = useState<boolean>(false);
   const [selectedSupporters, setSelectedSupporters] = useState<Set<string>>(new Set());
-  const [showSupporterSelect, setShowSupporterSelect] = useState(false);
-  const [crisisMessage, setCrisisMessage] = useState('');
+  const [showSupporterSelect, setShowSupporterSelect] = useState<boolean>(false);
+  const [crisisMessage, setCrisisMessage] = useState<string>('');
 
   // Mock supporters - in production, this would come from API
   const supporters: Supporter[] = [
@@ -73,7 +73,7 @@ export default function SupportPage(): JSX.Element {
 
     try {
       // PRD: API /api/crisis requires authentication
-      const response = await apiClient.createCrisisAlert({
+      const response = await apiClient.triggerCrisis({
         severity: 'high',
         message: crisisMessage || 'I need support right now.',
         supporter_ids: Array.from(selectedSupporters),

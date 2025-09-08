@@ -67,10 +67,10 @@ const MOCK_RESPONSES = {
 export default function DualAIChat() {
   const { user } = useStore();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState<string>('');
   const [mode, setMode] = useState<'peer' | 'clinical'>('peer');
-  const [isTyping, setIsTyping] = useState(false);
-  const [showCrisisAlert, setShowCrisisAlert] = useState(false);
+  const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [showCrisisAlert, setShowCrisisAlert] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

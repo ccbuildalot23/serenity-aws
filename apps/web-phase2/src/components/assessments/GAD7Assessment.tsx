@@ -30,9 +30,9 @@ interface Props {
 
 export default function GAD7Assessment({ onComplete }: Props) {
   const [responses, setResponses] = useState<number[]>(Array(7).fill(-1));
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [showResults, setShowResults] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<number>(0);
+  const [showResults, setShowResults] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { user } = useStore();
 
   const handleSelect = (value: number) => {

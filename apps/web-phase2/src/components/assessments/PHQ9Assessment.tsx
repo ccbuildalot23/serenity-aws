@@ -30,8 +30,8 @@ interface Props {
 
 export default function PHQ9Assessment({ onComplete }: Props) {
   const [responses, setResponses] = useState<number[]>(Array(9).fill(-1));
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [showResults, setShowResults] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<number>(0);
+  const [showResults, setShowResults] = useState<boolean>(false);
 
   const handleSelect = (value: number) => {
     const newResponses = [...responses];
