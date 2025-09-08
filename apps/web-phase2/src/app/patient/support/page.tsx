@@ -30,7 +30,7 @@ interface Supporter {
 }
 
 // PRD: Crisis Alert & Support Ping system
-export default function SupportPage() {
+export default function SupportPage(): JSX.Element {
   const router = useRouter();
   const { user } = useStore();
   const [isSubmittingCrisis, setIsSubmittingCrisis] = useState(false);
@@ -63,7 +63,7 @@ export default function SupportPage() {
     }
   ];
 
-  const handleCrisisAlert = async () => {
+  const handleCrisisAlert = async (): Promise<void> => {
     if (selectedSupporters.size === 0) {
       setShowSupporterSelect(true);
       return;
@@ -113,7 +113,7 @@ export default function SupportPage() {
     }
   };
 
-  const toggleSupporter = (supporterId: string) => {
+  const toggleSupporter = (supporterId: string): void => {
     const newSelected = new Set(selectedSupporters);
     if (newSelected.has(supporterId)) {
       newSelected.delete(supporterId);
@@ -123,7 +123,7 @@ export default function SupportPage() {
     setSelectedSupporters(newSelected);
   };
 
-  const getContactIcon = (method: string) => {
+  const getContactIcon = (method: string): JSX.Element => {
     switch (method) {
       case 'phone':
         return <Phone size={16} className="text-blue-500" />;

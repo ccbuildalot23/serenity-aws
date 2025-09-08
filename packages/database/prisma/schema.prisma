@@ -79,12 +79,17 @@ model PatientProfile {
   diagnoses       String[] // Encrypted in application layer
   medications     String[] // Encrypted in application layer
   
+  // Insurance Information
+  insuranceId     String?  // Member/Subscriber ID
+  payerId         String?  // Payer identifier
+  
   // Relationships
   emergencyContacts EmergencyContact[]
   goals            RecoveryGoal[]
   crisisPlan       CrisisPlan?
   providers        ProviderPatient[]
   supporters       PatientSupporter[]
+  charges          Charge[]
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -99,10 +104,16 @@ model ProviderProfile {
   organization    String?
   npiNumber       String?  // National Provider Identifier
   
+  // Billing Information
+  billingNPI      String?  // Billing Provider NPI
+  taxonomyCode    String?  // Provider taxonomy code
+  tin             String?  // Tax Identification Number
+  
   // Relationships
   patients        ProviderPatient[]
   carePlans       CarePlan[]
   billingEvents   BillingEvent[]
+  charges         Charge[]
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -270,6 +281,50 @@ model CrisisPlan {
 
 // ==================== BILLING & COMPLIANCE ====================
 
+model Charge {
+  id                    String   @id @default(cuid())
+  providerId            String
+  provider              ProviderProfile @relation(fields: [providerId], references: [id])
+  patientId             String
+  patient               PatientProfile @relation(fields: [patientId], references: [id])
+  
+  // Core Billing Fields
+  cptCode               String   // 90791, 90834, 90837, 90853
+  modifiers             String[] @default([])
+  diagnosisCodes        String[] @default([]) // ICD-10 codes
+  diagnosisPointers     String[] @default([]) // A, B, C, D pointers
+  units                 Int      @default(1)
+  
+  // CMS-1500 Required Fields
+  posCode               String?  // Place of Service (Box 24B)
+  renderingProviderNPI  String?  // Box 24J
+  billingProviderNPI    String?  // Box 33A
+  billingTIN            String?  // Box 25
+  payerId               String?  // Insurance payer ID
+  insuredId             String?  // Member ID (Box 1A)
+  acceptAssignment      Boolean  @default(true) // Box 27
+  signatureOnFile       Boolean  @default(true) // Box 12
+  chargeAmount          Decimal  @db.Decimal(10, 2) // Box 24F
+  
+  // Additional CMS-1500 Fields
+  serviceFacilityId     String?  // Box 32
+  referringProviderNPI  String?  // Box 17b
+  priorAuthNumber       String?  // Box 23
+  claimNotes            String?  // Box 19
+  
+  // Export Management
+  exportBatchId         String?
+  status                ChargeStatus @default(DRAFT)
+  
+  // Audit
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([providerId, createdAt])
+  @@index([status, providerId])
+  @@index([exportBatchId])
+}
+
 model BillingEvent {
   id          String   @id @default(cuid())
   providerId  String
@@ -342,6 +397,12 @@ enum GoalStatus {
   COMPLETED
   PAUSED
   CANCELLED
+}
+
+enum ChargeStatus {
+  DRAFT
+  READY_FOR_EXPORT
+  EXPORTED
 }
 
 enum BillingStatus {

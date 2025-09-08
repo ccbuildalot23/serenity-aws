@@ -19,7 +19,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
@@ -31,7 +31,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-export default function AuthProvider({ children }: AuthProviderProps) {
+export default function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const { setUser: setStoreUser, clearUser } = useStore();
@@ -83,7 +83,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     try {
       await cognitoAuth.logout();
       setUser(null);
@@ -124,7 +124,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const handleSessionTimeout = async () => {
+  const handleSessionTimeout = async (): Promise<void> => {
     toast.error('Session expired', {
       description: 'Your session has expired for security reasons. Please log in again.',
       duration: 5000
@@ -136,14 +136,14 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     window.location.href = '/login?reason=timeout';
   };
 
-  const handleSessionWarning = () => {
+  const handleSessionWarning = (): void => {
     toast.warning('Session expiring soon', {
       description: 'Your session will expire in 2 minutes due to inactivity.',
       duration: 4000
     });
   };
 
-  const handleUserActivity = async () => {
+  const handleUserActivity = async (): Promise<void> => {
     // Refresh session on user activity if needed
     if (user && cognitoAuth.getSessionTimeRemaining() < 300) { // Less than 5 minutes remaining
       await handleRefreshSession();

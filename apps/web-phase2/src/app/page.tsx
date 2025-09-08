@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 
-export default function HomePage() {
+export default function HomePage(): JSX.Element {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
 

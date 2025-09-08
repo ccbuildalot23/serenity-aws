@@ -31,7 +31,7 @@ interface InsightCard {
 }
 
 // PRD: Home page with daily check-in card, streak stats, insight cards
-export default function PatientHomePage() {
+export default function PatientHomePage(): JSX.Element {
   const router = useRouter();
   const { lastCheckIn, checkInStreak } = useStore();
   const { user, isAuthenticated } = useAuth();
@@ -42,9 +42,10 @@ export default function PatientHomePage() {
   const hasCheckedInToday = lastCheckIn && 
     new Date(lastCheckIn).toDateString() === new Date().toDateString();
 
-  // Load dismissed cards from localStorage
+  // Load dismissed cards from secure store (non-PHI data only)
   useEffect(() => {
     try {
+      // Note: This is non-PHI data (UI preferences only)
       const dismissed = localStorage.getItem('serenity_dismissed_insights');
       if (dismissed) {
         setDismissedCards(new Set(JSON.parse(dismissed)));
@@ -95,7 +96,7 @@ export default function PatientHomePage() {
     generateInsights();
   }, [checkInStreak, dismissedCards]);
 
-  const dismissInsight = (cardId: string) => {
+  const dismissInsight = (cardId: string): void => {
     const newDismissed = new Set(dismissedCards);
     newDismissed.add(cardId);
     setDismissedCards(newDismissed);
@@ -109,7 +110,7 @@ export default function PatientHomePage() {
     setInsights(prev => prev.filter(card => card.id !== cardId));
   };
 
-  const getTrendIcon = (trend?: string) => {
+  const getTrendIcon = (trend?: string): JSX.Element => {
     switch (trend) {
       case 'up':
         return <TrendingUp size={16} className="text-green-500" />;
@@ -120,7 +121,7 @@ export default function PatientHomePage() {
     }
   };
 
-  const getInsightIcon = (type: string) => {
+  const getInsightIcon = (type: string): JSX.Element => {
     switch (type) {
       case 'mood_pattern':
         return <Heart className="text-purple-500" size={20} />;

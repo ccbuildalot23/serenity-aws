@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 import { toast } from 'sonner';
 
-export default function LoginPage() {
+export default function LoginPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated, validatePassword } = useAuth();
@@ -67,7 +67,7 @@ export default function LoginPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -100,7 +100,7 @@ export default function LoginPage() {
     }
   };
 
-  const handlePasswordReset = () => {
+  const handlePasswordReset = (): void => {
     if (!credentials.email) {
       toast.error('Please enter your email address first');
       return;

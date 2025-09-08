@@ -16,7 +16,7 @@ import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 
 // PRD Requirement: Two-tap check-in system (≤3 taps, <10 seconds)
-export default function DailyCheckInPage() {
+export default function DailyCheckInPage(): JSX.Element {
   const router = useRouter();
   const { setLastCheckIn, setCheckInStreak, lastCheckIn } = useStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,7 +52,7 @@ export default function DailyCheckInPage() {
   }, []);
 
   // Save current values for next time (PRD requirement: defaults to last entry)
-  const saveCurrentValues = () => {
+  const saveCurrentValues = (): void => {
     try {
       localStorage.setItem('serenity_last_checkin_values', JSON.stringify({
         mood: checkInData.mood,
@@ -64,7 +64,7 @@ export default function DailyCheckInPage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     // PRD Requirement: Submit in <10 seconds with ≤3 taps
     setIsSubmitting(true);
     
