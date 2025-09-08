@@ -31,14 +31,28 @@ export interface ExportOptions {
   includeHeaders?: boolean;
   dateFormat?: string;
   includeMetadata?: boolean;
+  includePatientNames?: boolean;
+  dateRange?: {
+    startDate: string;
+    endDate: string;
+  };
+  fields?: string[];
 }
 
 export interface ExportResult {
-  data: string;
-  filename: string;
-  contentType: string;
-  recordCount: number;
-  exportedAt: Date;
+  data?: string;
+  content?: string;
+  filename?: string;
+  contentType?: string;
+  recordCount?: number;
+  exportedAt?: Date;
+  warnings?: string[];
+  metadata?: {
+    recordCount: number;
+    exportedAt: string;
+    format: string;
+    includesPHI: boolean;
+  };
 }
 
 export interface ExportMetadata {
@@ -206,9 +220,62 @@ export function exportToJSON(
 }
 
 /**
- * Main export function that routes to appropriate format handler
+ * Enhanced export function with PHI handling and validation
  */
 export function exportCharges(
+  charges: ChargeExportData[],
+  options: ExportOptions
+): ExportResult {
+  const warnings: string[] = [];
+  const exportedAt = new Date().toISOString();
+  
+  // Validate charges data
+  const validation = validateExportData(charges);
+  if (!validation.isValid) {
+    throw new Error(`Export validation failed: ${validation.errors.join('; ')}`);
+  }
+  
+  // Handle PHI fields
+  if (!options.includePatientNames) {
+    // Remove or mask patient names for non-PHI exports
+    charges = charges.map(charge => ({
+      ...charge,
+      patientInitials: undefined // Remove patient initials for non-PHI export
+    }));
+    warnings.push('Patient names excluded from export (PHI protection)');
+  }
+  
+  let result: ExportResult;
+  
+  switch (options.format) {
+    case 'csv':
+      result = exportToCSV(charges, options);
+      break;
+    case 'json':
+      result = exportToJSON(charges, options);
+      break;
+    default:
+      throw new Error(`Unsupported export format: ${options.format}`);
+  }
+  
+  // Return enhanced result with warnings and metadata
+  return {
+    ...result,
+    content: result.data, // Alias for API compatibility
+    warnings,
+    metadata: {
+      recordCount: charges.length,
+      exportedAt,
+      format: options.format,
+      includesPHI: options.includePatientNames || false
+    }
+  };
+}
+
+/**
+ * Main export function that routes to appropriate format handler (legacy)
+ */
+export function exportChargesLegacy(
   charges: ChargeExportData[],
   options: ExportOptions
 ): ExportResult {
