@@ -15,6 +15,7 @@ import {
   Clock,
   X
 } from 'lucide-react';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/providers/AuthProvider';
@@ -276,6 +277,7 @@ export default function PatientHomePage(): JSX.Element {
           </div>
         </div>
       )}
+      {/* Session Timeout Component */}      <SessionTimeout        timeoutMinutes={15}        warningMinutes={2}        onTimeout={() => router.push('/login?reason=timeout')}      />
     </div>
   );
 }

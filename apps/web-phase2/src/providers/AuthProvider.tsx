@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) : React.ComponentType<P> {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -42,11 +42,11 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
       try {
         const currentUser = cognitoAuth.getCurrentUser();
         
-        if (currentUser && !cognitoAuth.isSessionExpired()) : React.ComponentType<P> {
+        if (currentUser && !cognitoAuth.isSessionExpired()) {
           // Check if session is still valid
           const sessionValid = await cognitoAuth.refreshSession();
           
-          if (sessionValid) : React.ComponentType<P> {
+          if (sessionValid) {
             setUser(currentUser);
             setStoreUser(currentUser);
           } else {
@@ -54,7 +54,7 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
             await handleLogout();
           }
         }
-      } catch (error) : React.ComponentType<P> {
+      } catch (error) {
         console.error('Failed to initialize auth state:', error);
       } finally {
         setIsInitialized(true);
@@ -75,7 +75,7 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
       });
       
       return authResponse;
-    } catch (error) : React.ComponentType<P> {
+    } catch (error) {
       toast.error('Login failed', {
         description: error instanceof Error ? error.message : 'Please check your credentials and try again.'
       });
@@ -92,7 +92,7 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
       toast.info('Logged out successfully', {
         description: 'You have been securely logged out.'
       });
-    } catch (error) : React.ComponentType<P> {
+    } catch (error) {
       console.error('Logout error:', error);
       // Force logout even if Cognito call fails
       setUser(null);
@@ -104,20 +104,20 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
     try {
       const success = await cognitoAuth.refreshSession();
       
-      if (!success) : React.ComponentType<P> {
+      if (!success) {
         await handleLogout();
         return false;
       }
       
       // Update user state with refreshed session info
       const refreshedUser = cognitoAuth.getCurrentUser();
-      if (refreshedUser) : React.ComponentType<P> {
+      if (refreshedUser) {
         setUser(refreshedUser);
         setStoreUser(refreshedUser);
       }
       
       return true;
-    } catch (error) : React.ComponentType<P> {
+    } catch (error) {
       console.error('Session refresh failed:', error);
       await handleLogout();
       return false;
@@ -161,7 +161,7 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
     validatePassword: cognitoAuth.validatePassword
   };
 
-  if (!isInitialized) : React.ComponentType<P> {
+  if (!isInitialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-600"></div>
@@ -189,23 +189,23 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
 export function withAuth<P extends object>(
   Component: React.ComponentType<P>,
   requiredRole?: User['role']
-) : React.ComponentType<P> {
+): React.ComponentType<P> {
   return function ProtectedComponent(props: P): JSX.Element {
     const { user, isAuthenticated } = useAuth();
     
     useEffect(() => {
-      if (!isAuthenticated) : React.ComponentType<P> {
+      if (!isAuthenticated) {
         window.location.href = '/login?reason=unauthorized';
         return;
       }
       
-      if (requiredRole && user?.role !== requiredRole) : React.ComponentType<P> {
+      if (requiredRole && user?.role !== requiredRole) {
         window.location.href = '/unauthorized';
         return;
       }
     }, [isAuthenticated, user]);
     
-    if (!isAuthenticated || (requiredRole && user?.role !== requiredRole)) : React.ComponentType<P> {
+    if (!isAuthenticated || (requiredRole && user?.role !== requiredRole)) {
       return (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">

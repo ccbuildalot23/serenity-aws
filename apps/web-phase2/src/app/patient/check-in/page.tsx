@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
 
 // PRD Requirement: Two-tap check-in system (≤3 taps, <10 seconds)
 export default function DailyCheckInPage(): JSX.Element {
@@ -60,10 +61,9 @@ export default function DailyCheckInPage(): JSX.Element {
   const saveCurrentValues = (): void => {
     try {
       // PHI data removed from localStorage - HIPAA compliance
-        mood: checkInData.mood,
-        anxiety: checkInData.anxiety,
-        sleep: checkInData.sleep,
-      }));
+      // Note: Previously saved mood, anxiety, and sleep values
+      // but removed for HIPAA compliance
+      console.log('Check-in values saved in memory only');
     } catch (error) {
       console.error('Failed to save check-in values:', error);
     }
@@ -250,6 +250,13 @@ export default function DailyCheckInPage(): JSX.Element {
           ⚡ Complete in under 10 seconds
         </div>
       </div>
+
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }
