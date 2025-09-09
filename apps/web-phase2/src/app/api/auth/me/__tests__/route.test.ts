@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { GET } from '../route';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';

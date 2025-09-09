@@ -81,7 +81,7 @@ class MockHeaders implements Headers {
   }
 }
 
-// Custom Request implementation
+// Custom Request implementation with proper readonly properties
 class MockRequest implements Request {
   readonly body: ReadableStream<Uint8Array> | null = null;
   readonly bodyUsed: boolean = false;
@@ -100,9 +100,14 @@ class MockRequest implements Request {
   readonly url: string;
 
   constructor(input: RequestInfo | URL, init?: RequestInit) {
-    this.url = typeof input === 'string' ? input : input.toString();
-    this.method = init?.method || 'GET';
-    this.headers = new MockHeaders(init?.headers);
+    const urlValue = typeof input === 'string' ? input : input.toString();
+    const methodValue = init?.method || 'GET';
+    const headersValue = new MockHeaders(init?.headers);
+    
+    // Use Object.defineProperty to set readonly properties
+    Object.defineProperty(this, 'url', { value: urlValue, writable: false });
+    Object.defineProperty(this, 'method', { value: methodValue, writable: false });
+    Object.defineProperty(this, 'headers', { value: headersValue, writable: false });
   }
 
   async arrayBuffer(): Promise<ArrayBuffer> { return new ArrayBuffer(0); }
@@ -113,7 +118,7 @@ class MockRequest implements Request {
   clone(): Request { return new MockRequest(this.url, { method: this.method, headers: this.headers }); }
 }
 
-// Custom Response implementation
+// Custom Response implementation with proper readonly properties
 class MockResponse implements Response {
   readonly body: ReadableStream<Uint8Array> | null = null;
   readonly bodyUsed: boolean = false;
@@ -124,19 +129,35 @@ class MockResponse implements Response {
   readonly statusText: string;
   readonly type: ResponseType = 'basic';
   readonly url: string = '';
+  private _body: string;
 
   constructor(body?: BodyInit | null, init?: ResponseInit) {
-    this.status = init?.status || 200;
-    this.statusText = init?.statusText || 'OK';
-    this.ok = this.status >= 200 && this.status < 300;
-    this.headers = new MockHeaders(init?.headers);
+    const statusValue = init?.status || 200;
+    const statusTextValue = init?.statusText || 'OK';
+    const okValue = statusValue >= 200 && statusValue < 300;
+    const headersValue = new MockHeaders(init?.headers);
+    
+    // Store body content for .json() and .text() methods
+    this._body = typeof body === 'string' ? body : body?.toString() || '';
+    
+    // Use Object.defineProperty to set readonly properties
+    Object.defineProperty(this, 'status', { value: statusValue, writable: false });
+    Object.defineProperty(this, 'statusText', { value: statusTextValue, writable: false });
+    Object.defineProperty(this, 'ok', { value: okValue, writable: false });
+    Object.defineProperty(this, 'headers', { value: headersValue, writable: false });
   }
 
   async arrayBuffer(): Promise<ArrayBuffer> { return new ArrayBuffer(0); }
   async blob(): Promise<Blob> { throw new Error('Not implemented'); }
   async formData(): Promise<FormData> { throw new Error('Not implemented'); }
-  async json(): Promise<any> { return {}; }
-  async text(): Promise<string> { return ''; }
+  async json(): Promise<any> { 
+    try {
+      return JSON.parse(this._body || '{}');
+    } catch {
+      return {};
+    }
+  }
+  async text(): Promise<string> { return this._body || ''; }
   clone(): Response { return new MockResponse('', { status: this.status, statusText: this.statusText, headers: this.headers }); }
 
   static error(): Response { return new MockResponse('', { status: 500, statusText: 'Internal Server Error' }); }
@@ -193,15 +214,22 @@ global.atob = jest.fn((str) => Buffer.from(str, 'base64').toString());
 Object.defineProperty(global, 'crypto', { value: mockCrypto });
 Object.defineProperty(global, 'TextEncoder', { value: MockTextEncoder });
 Object.defineProperty(global, 'TextDecoder', { value: MockTextDecoder });
-Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
 
-// Mock navigator
-Object.defineProperty(window, 'navigator', {
-  value: {
-    userAgent: 'Mozilla/5.0 (Test Environment)'
-  },
-  writable: true
-});
+// Only set up window-specific mocks in jsdom environment
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+  
+  // Mock navigator
+  Object.defineProperty(window, 'navigator', {
+    value: {
+      userAgent: 'Mozilla/5.0 (Test Environment)'
+    },
+    writable: true
+  });
+} else {
+  // In Node environment, set up localStorage on global
+  Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+}
 
 // Suppress console errors during tests
 const originalConsoleError = console.error;
