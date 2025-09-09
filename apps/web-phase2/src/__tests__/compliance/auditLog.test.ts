@@ -1,3 +1,4 @@
+/** @jest-environment jsdom */
 import { auditLogger, AuditEventType } from '@/utils/auditLog';
 
 // Mock console methods to avoid noise in tests

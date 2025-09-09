@@ -327,4 +327,106 @@ describe('Authentication API', () => {
       expect(response.body).toHaveProperty('error');
     });
   });
+
+  describe('POST /auth/verify-email', () => {
+    it('should verify email with valid code', async () => {
+      const response = await request(app)
+        .post('/api/auth/verify-email')
+        .send({
+          email: 'test@example.com',
+          code: '123456',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message');
+    });
+
+    it('should handle verification errors', async () => {
+      // Mock Cognito client to throw error for this test
+      const mockSend = jest.fn().mockRejectedValue({
+        message: 'Invalid verification code',
+      });
+      
+      jest.doMock('@aws-sdk/client-cognito-identity-provider', () => ({
+        CognitoIdentityProviderClient: jest.fn().mockImplementation(() => ({
+          send: mockSend,
+        })),
+        ConfirmSignUpCommand: jest.fn(),
+      }));
+
+      const response = await request(app)
+        .post('/api/auth/verify-email')
+        .send({
+          email: 'test@example.com',
+          code: 'invalid',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should reject invalid email format', async () => {
+      const response = await request(app)
+        .post('/api/auth/verify-email')
+        .send({
+          email: 'invalid-email',
+          code: '123456',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should reject invalid code length', async () => {
+      const response = await request(app)
+        .post('/api/auth/verify-email')
+        .send({
+          email: 'test@example.com',
+          code: '123',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+  });
+
+  describe('Error handling and edge cases', () => {
+    it('should handle malformed JSON in request body', async () => {
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send('invalid-json')
+        .set('Content-Type', 'application/json');
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should handle missing required fields', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'test@example.com',
+          // Missing password, firstName, lastName, role
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should handle password complexity requirements', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'test@example.com',
+          password: 'weak',
+          firstName: 'Test',
+          lastName: 'User',
+          role: 'PATIENT',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+  });
 });

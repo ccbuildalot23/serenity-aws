@@ -1,3 +1,4 @@
+/** @jest-environment jsdom */
 /**
  * Billing Integration Tests
  * End-to-end tests for billing workflow from UI to API

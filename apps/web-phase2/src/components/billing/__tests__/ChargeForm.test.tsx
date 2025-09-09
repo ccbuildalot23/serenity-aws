@@ -1,3 +1,4 @@
+/** @jest-environment jsdom */
 /**
  * ChargeForm Component Tests
  * Tests for billing charge form with validation and user interactions

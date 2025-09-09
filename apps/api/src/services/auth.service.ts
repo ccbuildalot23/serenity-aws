@@ -214,3 +214,6 @@ export class AuthService {
     };
   };
 }
+
+// Export singleton instance for testing and usage
+export const authService = new AuthService();

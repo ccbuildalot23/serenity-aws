@@ -1,3 +1,4 @@
+/** @jest-environment node */
 /**
  * Billing Scrub Service Tests
  * Tests for CMS-1500 compliance checking and data scrubbing
