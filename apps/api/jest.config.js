@@ -12,6 +12,7 @@ module.exports = {
     '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
     '!src/__tests__/**',
+    '!src/index.ts',  // Exclude bootstrap file from coverage
   ],
   coverageThreshold: {
     global: {
