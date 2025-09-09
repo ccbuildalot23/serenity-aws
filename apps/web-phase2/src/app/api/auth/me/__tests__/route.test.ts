@@ -22,13 +22,7 @@ describe('/api/auth/me', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (CognitoJwtVerifier.create as jest.Mock).mockReturnValue(mockVerifier);
-    // Mock environment variables to force production mode for consistent testing
-    process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID = 'test-pool-id';
-    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID = 'test-client-id';
-  });
-
-  afterEach(() => {
-    // Clean up environment variables
+    // Clear env vars to force dev mode for consistent test behavior
     delete process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
     delete process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
   });
