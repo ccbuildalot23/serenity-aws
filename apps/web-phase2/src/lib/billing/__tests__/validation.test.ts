@@ -412,9 +412,9 @@ describe('Billing Validation', () => {
           units: 0,
         });
       } catch (error: any) {
-        expect(error.errors).toBeDefined();
-        expect(Array.isArray(error.errors)).toBe(true);
-        expect(error.errors.length).toBeGreaterThan(0);
+        expect(error.issues).toBeDefined();
+        expect(Array.isArray(error.issues)).toBe(true);
+        expect(error.issues.length).toBeGreaterThan(0);
       }
     });
 
@@ -429,9 +429,9 @@ describe('Billing Validation', () => {
           },
         });
       } catch (error: any) {
-        expect(error.errors).toBeDefined();
-        expect(error.errors.some((err: string) => err.includes('format'))).toBe(true);
-        expect(error.errors.some((err: string) => err.includes('status'))).toBe(true);
+        expect(error.issues).toBeDefined();
+        expect(error.issues.some((err: any) => err.message.includes('format'))).toBe(true);
+        expect(error.issues.some((err: any) => err.message.includes('status'))).toBe(true);
       }
     });
 

@@ -202,7 +202,7 @@ describe('/api/billing/charges', () => {
       mockHeaders.get.mockReturnValue('Bearer provider_token');
       validateChargeCreate.mockImplementation(() => {
         const error = new Error('Validation failed');
-        error.errors = ['CPT code is required'];
+        error.issues = [{ message: 'CPT code is required' }];
         throw error;
       });
       
@@ -378,7 +378,7 @@ describe('/api/billing/charges', () => {
       mockHeaders.get.mockReturnValue('Bearer provider_token');
       validateChargeCreate.mockImplementation(() => {
         const error = new Error('Invalid data');
-        error.errors = ['CPT code is required'];
+        error.issues = [{ message: 'CPT code is required' }];
         throw error;
       });
       
