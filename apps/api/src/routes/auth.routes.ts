@@ -8,12 +8,8 @@ import {
   ConfirmForgotPasswordCommand,
   RespondToAuthChallengeCommand,
   GetUserCommand,
-  AdminCreateUserCommand,
-  AdminSetUserPasswordCommand,
-  AdminAddUserToGroupCommand,
   GlobalSignOutCommand
 } from '@aws-sdk/client-cognito-identity-provider';
-import { AuthService } from '../services/auth.service';
 import crypto from 'crypto';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
@@ -27,7 +23,6 @@ const cognitoClient = new CognitoIdentityProviderClient({
 
 const CLIENT_ID = process.env.COGNITO_CLIENT_ID!;
 const CLIENT_SECRET = process.env.COGNITO_CLIENT_SECRET!;
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!;
 
 // Validation schemas
 const registerSchema = z.object({

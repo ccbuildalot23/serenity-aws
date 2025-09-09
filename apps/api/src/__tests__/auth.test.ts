@@ -1,6 +1,5 @@
 import request from 'supertest';
 import express from 'express';
-import { AuthService } from '../services/auth.service';
 
 // Mock AWS SDK
 jest.mock('@aws-sdk/client-cognito-identity-provider', () => ({
