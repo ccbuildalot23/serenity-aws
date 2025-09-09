@@ -55,5 +55,58 @@ describe('AuthService Basic Coverage', () => {
       expect(typeof AuthService.createUser).toBe('function');
       expect(typeof AuthService.getUser).toBe('function');
     });
+
+    it('should handle middleware error scenarios', () => {
+      const mockReq = { headers: {}, user: undefined };
+      const mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      };
+      const mockNext = jest.fn();
+
+      // Test authorize middleware without user
+      const authMiddleware = AuthService.authorize('PATIENT');
+      authMiddleware(mockReq as any, mockRes as any, mockNext);
+      
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Authentication required' });
+    });
+
+    it('should handle role authorization', () => {
+      const mockReq = { 
+        headers: {},
+        user: { id: '123', email: 'test@example.com', role: 'PATIENT', tenantId: 'tenant' }
+      };
+      const mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      };
+      const mockNext = jest.fn();
+
+      // Test successful authorization
+      const authMiddleware = AuthService.authorize('PATIENT', 'PROVIDER');
+      authMiddleware(mockReq as any, mockRes as any, mockNext);
+      
+      expect(mockNext).toHaveBeenCalled();
+    });
+
+    it('should reject unauthorized role', () => {
+      const mockReq = { 
+        headers: {},
+        user: { id: '123', email: 'test@example.com', role: 'PATIENT', tenantId: 'tenant' }
+      };
+      const mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      };
+      const mockNext = jest.fn();
+
+      // Test role rejection
+      const authMiddleware = AuthService.authorize('ADMIN');
+      authMiddleware(mockReq as any, mockRes as any, mockNext);
+      
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Insufficient permissions' });
+    });
   });
 });
