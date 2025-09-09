@@ -1,10 +1,27 @@
 // Jest setup file for compliance tests
-import '@testing-library/jest-dom';
+// Load Node.js built-ins FIRST for reliable CI behavior
 import { TextEncoder, TextDecoder } from 'util';
+import { webcrypto } from 'crypto';
 
-// Polyfill TextEncoder/TextDecoder from util (Node.js)
+// Set globals immediately before any other imports
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder as any;
+
+// Enhanced Web Crypto API polyfill for HIPAA encryption testing
+if (!global.crypto || !global.crypto.subtle) {
+  global.crypto = {
+    ...webcrypto,
+    // Ensure getRandomValues is available for secure testing
+    getRandomValues: (array: Uint8Array | Uint16Array | Uint32Array) => {
+      return webcrypto.getRandomValues(array);
+    },
+    // Add randomUUID for compliance testing
+    randomUUID: webcrypto.randomUUID,
+  } as any;
+}
+
+// Now import testing frameworks
+import '@testing-library/jest-dom';
 
 // Custom Headers implementation with iteration support
 class MockHeaders implements Headers {

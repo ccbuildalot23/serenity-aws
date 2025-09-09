@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
 
 interface Supporter {
   id: string;
@@ -368,6 +369,13 @@ export default function SupportPage(): JSX.Element {
           </button>
         </div>
       </div>
+
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }

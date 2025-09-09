@@ -259,6 +259,11 @@ class AuditLogger {
 
   private storeLocal(entry: AuditLogEntry): void {
     try {
+      // Skip if localStorage is not available (SSR)
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return;
+      }
+
       const logs = this.getLocalLogs();
       logs.unshift(entry); // Add to beginning
       
@@ -275,6 +280,11 @@ class AuditLogger {
 
   private getLocalLogs(): AuditLogEntry[] {
     try {
+      // Return empty array if localStorage is not available (SSR)
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return [];
+      }
+      
       const stored = localStorage.getItem(this.STORAGE_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch {

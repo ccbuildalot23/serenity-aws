@@ -40,23 +40,32 @@ export default function AuthProvider({ children }: AuthProviderProps): JSX.Eleme
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        console.log('Initializing auth state...');
         const currentUser = cognitoAuth.getCurrentUser();
+        console.log('Current user from cognitoAuth:', currentUser);
         
         if (currentUser && !cognitoAuth.isSessionExpired()) {
+          console.log('User found and session not expired, checking session validity...');
           // Check if session is still valid
           const sessionValid = await cognitoAuth.refreshSession();
+          console.log('Session valid:', sessionValid);
           
           if (sessionValid) {
             setUser(currentUser);
             setStoreUser(currentUser);
+            console.log('User authenticated successfully');
           } else {
             // Session expired, logout
+            console.log('Session invalid, logging out...');
             await handleLogout();
           }
+        } else {
+          console.log('No user found or session expired');
         }
       } catch (error) {
         console.error('Failed to initialize auth state:', error);
       } finally {
+        console.log('Auth initialization complete');
         setIsInitialized(true);
       }
     };

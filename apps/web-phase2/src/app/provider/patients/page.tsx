@@ -21,6 +21,8 @@ import { formatDate } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { apiClient } from '@/lib/api-client';
 import Link from 'next/link';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
+import { useRouter } from 'next/navigation';
 
 interface Patient {
   id: string;
@@ -124,6 +126,7 @@ const mockPatients: Patient[] = [
 ];
 
 export default function PatientsPage() {
+  const router = useRouter();
   const { user } = useStore();
   const [patients, setPatients] = useState<Patient[]>(mockPatients);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -400,6 +403,13 @@ export default function PatientsPage() {
           <p className="text-gray-500">No patients found matching your criteria</p>
         </div>
       )}
+
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }

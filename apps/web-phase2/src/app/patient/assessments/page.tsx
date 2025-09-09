@@ -20,6 +20,8 @@ import { formatDate } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
+import { useRouter } from 'next/navigation';
 
 interface Assessment {
   id: string;
@@ -69,6 +71,7 @@ const assessments: Assessment[] = [
 ];
 
 export default function AssessmentsPage() {
+  const router = useRouter();
   const { user } = useStore();
   const [assessmentHistory, setAssessmentHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -381,6 +384,13 @@ export default function AssessmentsPage() {
           <li>• Celebrate improvements and progress</li>
         </ul>
       </div>
+
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }

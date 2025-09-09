@@ -277,7 +277,12 @@ export default function PatientHomePage(): JSX.Element {
           </div>
         </div>
       )}
-      {/* Session Timeout Component */}      <SessionTimeout        timeoutMinutes={15}        warningMinutes={2}        onTimeout={() => router.push('/login?reason=timeout')}      />
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }

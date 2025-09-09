@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
+import SessionTimeout from '@/components/compliance/SessionTimeout';
 
 type ViewMode = 'dashboard' | 'create-charge' | 'edit-charge';
 
@@ -244,6 +245,13 @@ export default function BillingPage(): JSX.Element {
           onCancel={handleCancelForm}
           isLoading={isSubmitting}
         />
+        
+        {/* Session Timeout Component */}
+        <SessionTimeout
+          timeoutMinutes={15}
+          warningMinutes={2}
+          onTimeout={() => router.push('/login?reason=timeout')}
+        />
       </div>
     );
   }
@@ -273,6 +281,13 @@ export default function BillingPage(): JSX.Element {
           onSubmit={handleSubmitCharge}
           onCancel={handleCancelForm}
           isLoading={isSubmitting}
+        />
+        
+        {/* Session Timeout Component */}
+        <SessionTimeout
+          timeoutMinutes={15}
+          warningMinutes={2}
+          onTimeout={() => router.push('/login?reason=timeout')}
         />
       </div>
     );
@@ -340,6 +355,13 @@ export default function BillingPage(): JSX.Element {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Session Timeout Component */}
+      <SessionTimeout
+        timeoutMinutes={15}
+        warningMinutes={2}
+        onTimeout={() => router.push('/login?reason=timeout')}
+      />
     </div>
   );
 }
