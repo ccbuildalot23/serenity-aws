@@ -137,8 +137,9 @@ class MockResponse implements Response {
     const okValue = statusValue >= 200 && statusValue < 300;
     const headersValue = new MockHeaders(init?.headers);
     
-    // Store body content for .json() and .text() methods
-    this._body = typeof body === 'string' ? body : body?.toString() || '';
+    // Store body content for .json() and .text() methods - Fixed for NextResponse.json()
+    this._body = typeof body === 'string' ? body : 
+                 body ? JSON.stringify(body) : '';
     
     // Use Object.defineProperty to set readonly properties
     Object.defineProperty(this, 'status', { value: statusValue, writable: false });

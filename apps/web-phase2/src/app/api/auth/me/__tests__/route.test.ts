@@ -5,6 +5,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GET } from '../route';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 
+// Mock NextResponse.json to return proper Response objects
+NextResponse.json = jest.fn((body: any, init?: ResponseInit) => {
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...init?.headers,
+    },
+  });
+}) as any;
+
 // Mock the CognitoJwtVerifier
 jest.mock('aws-jwt-verify', () => ({
   CognitoJwtVerifier: {
