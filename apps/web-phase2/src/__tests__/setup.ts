@@ -171,6 +171,20 @@ global.Headers = MockHeaders as any;
 global.Request = MockRequest as any;
 global.Response = MockResponse as any;
 
+// Global NextResponse shim for consistent test behavior
+// This must be imported and shimmed BEFORE any route handler imports
+import { NextResponse } from 'next/server';
+const originalNextResponseJson = NextResponse.json;
+NextResponse.json = ((body: any, init?: ResponseInit) =>
+  new Response(JSON.stringify(body ?? {}), {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  })
+) as any;
+
 // Mock Web APIs that aren't available in Jest environment
 const mockCrypto = {
   getRandomValues: (array: Uint8Array) => {

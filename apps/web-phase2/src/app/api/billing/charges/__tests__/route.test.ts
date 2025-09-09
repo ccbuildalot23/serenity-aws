@@ -1,8 +1,6 @@
 /**
- * Billing Charges API Tests
- * Tests for CRUD operations on billing charges with authentication and validation
+ * @jest-environment node
  */
-
 import { NextRequest } from 'next/server';
 import { GET, POST } from '../route';
 
