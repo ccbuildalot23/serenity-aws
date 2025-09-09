@@ -104,7 +104,7 @@ router.post('/', AuthService.authenticate, async (req: Request, res: Response) =
     console.error('Check-in error:', error);
     
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
     
     res.status(500).json({ error: 'Check-in failed' });
@@ -247,7 +247,7 @@ router.post('/emergency-contacts', AuthService.authenticate, async (req: Request
     console.error('Emergency contact error:', error);
     
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
     
     res.status(500).json({ error: 'Failed to add emergency contact' });

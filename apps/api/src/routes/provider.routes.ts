@@ -348,7 +348,7 @@ router.post('/patient', AuthService.authenticate, AuthService.authorize('PROVIDE
     console.error('Assign patient error:', error);
     
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
     
     res.status(500).json({ error: 'Failed to assign patient' });
@@ -395,7 +395,7 @@ router.post('/care-plan', AuthService.authenticate, AuthService.authorize('PROVI
     console.error('Care plan error:', error);
     
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
     
     res.status(500).json({ error: 'Failed to create care plan' });
@@ -447,7 +447,7 @@ router.post('/message', AuthService.authenticate, AuthService.authorize('PROVIDE
     console.error('Message error:', error);
     
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
     
     res.status(500).json({ error: 'Failed to send message' });

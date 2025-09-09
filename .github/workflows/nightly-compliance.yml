@@ -232,10 +232,88 @@ jobs:
           STALE_BRANCHES=$(git for-each-ref --format='%(refname:short) %(committerdate)' refs/heads | awk '$2 <= "'$(date -d '30 days ago' '+%Y-%m-%d')'"' | wc -l)
           echo "- Stale branches (>30 days): $STALE_BRANCHES"
 
+  e2e-phi-protection-tests:
+    name: PHI Protection E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Playwright browsers
+        run: |
+          cd apps/web-phase2
+          npx playwright install --with-deps chromium
+      
+      - name: Build applications
+        run: |
+          npm run build
+          cd apps/web-phase2
+          npm run build
+      
+      - name: Start API server
+        run: |
+          cd apps/api
+          npm run start &
+          echo $! > api.pid
+          sleep 10  # Wait for server to start
+        env:
+          NODE_ENV: test
+          DATABASE_URL: sqlite://test.db
+          JWT_SECRET: test-secret-for-e2e
+      
+      - name: Start web-phase2 server
+        run: |
+          cd apps/web-phase2
+          npm run start &
+          echo $! > web.pid
+          sleep 15  # Wait for Next.js to start
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_MOCK_AUTH: true
+          NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
+      
+      - name: Run PHI Protection E2E Tests
+        run: |
+          cd apps/web-phase2
+          npx playwright test tests/e2e/phi-protection.spec.ts --reporter=html
+        env:
+          PLAYWRIGHT_HEADLESS: true
+      
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            apps/web-phase2/playwright-report/
+            apps/web-phase2/test-results/
+          retention-days: 30
+      
+      - name: Stop servers
+        if: always()
+        run: |
+          if [ -f apps/api/api.pid ]; then
+            kill $(cat apps/api/api.pid) || true
+          fi
+          if [ -f apps/web-phase2/web.pid ]; then
+            kill $(cat apps/web-phase2/web.pid) || true
+          fi
+
   compliance-reporting:
     name: Generate Compliance Report
     runs-on: ubuntu-latest
-    needs: [comprehensive-security-scan, hipaa-compliance-audit, performance-regression-testing, git-repository-health]
+    needs: [comprehensive-security-scan, hipaa-compliance-audit, performance-regression-testing, git-repository-health, e2e-phi-protection-tests]
     if: always()  # Run even if other jobs fail
     timeout-minutes: 10
     

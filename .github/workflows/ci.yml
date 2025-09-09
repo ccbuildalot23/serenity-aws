@@ -109,6 +109,15 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
           JWT_SECRET: test-secret-key-for-testing-only
           
+      - name: Run web-phase2 compliance tests
+        run: |
+          cd apps/web-phase2
+          npm run test:unit
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_AWS_REGION: us-east-1
+          NEXT_PUBLIC_MOCK_AUTH: true
+          
       - name: Run integration tests
         run: pnpm run test:integration
         env:
