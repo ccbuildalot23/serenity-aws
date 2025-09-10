@@ -1,208 +1,379 @@
-# EXA Research References: Implementation Patterns
+# Implementation Patterns Reference
 
-This document contains comprehensive findings from web searches on key implementation patterns for modern web applications.
+Research findings for key implementation patterns gathered from web research.
 
-## 1. NextResponse.json Jest Node 20 Stable Testing
+## 1. NextResponse.json Jest Testing Patterns for Node 20
 
-### Overview
-Testing Next.js App Router API routes that use `NextResponse.json` requires specific Jest configuration and environment setup for Node 20 stable environments.
+### Basic Testing Pattern
+The most stable approach for testing Next.js API routes with NextResponse.json in Node 20:
 
-### Best Practices
-
-#### Jest Environment Configuration
 ```javascript
 /** 
  * @jest-environment node 
  */
-import { GET } from './route';
-```
+import { GET, POST } from './route';
+import { NextRequest } from 'next/server';
 
-**Key Point**: Use `@jest-environment node` comment in test files rather than jsdom for API route testing.
+describe('API Route Tests', () => {
+  it('should return data with status 200', async () => {
+    const response = await GET();
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toBeDefined();
+  });
 
-#### Basic Test Structure
-```javascript
-/** 
- * @jest-environment node 
- */
-import { GET } from './route';
-
-it('should return data with status 200', async () => {
-  const response = await GET();
-  const body = await response.json();
-  expect(response.status).toBe(200);
-  expect(body.length).toBe(2);
+  it('should handle POST requests', async () => {
+    const requestBody = { name: 'test' };
+    const request = new NextRequest('http://localhost:3000/api/test', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const response = await POST(request);
+    const body = await response.json();
+    expect(response.status).toBe(201);
+    expect(body.name).toBe('test');
+  });
 });
 ```
 
-#### Testing with Request Parameters
-```javascript
-it('should return data with status 200', async () => {
-  const requestObj = {
-    nextUrl: {
-      searchParams: new URLSearchParams({ Id: '1' }),
-    },
-  } as any;
-  
-  const response = await GET(requestObj);
-  const body = await response.json();
-  expect(response.status).toBe(200);
-  expect(body.id).toBe(1);
-});
-```
+### Advanced Testing with next-test-api-route-handler
+For comprehensive testing with better isolation:
 
-#### Alternative: next-test-api-route-handler
 ```javascript
 import { testApiHandler } from "next-test-api-route-handler";
 import * as appHandler from "./route";
 
-it("GET returns 200", async () => {
+it("handles error scenarios", async () => {
   await testApiHandler({
     appHandler,
     test: async ({ fetch }) => {
-      const response = await fetch({ method: "GET" });
+      const response = await fetch({ 
+        method: "POST",
+        body: JSON.stringify({ invalid: true })
+      });
+      expect(response.status).toBe(400);
       const json = await response.json();
-      expect(response.status).toBe(200);
+      expect(json.message).toBe('Validation failed');
     },
   });
 });
 ```
 
-### Common Pitfalls and Solutions
-
-- **ReferenceError: Request is not defined**: Occurs when test environment isn't properly configured for Node.js
-- **Solution**: Ensure proper Jest environment configuration with `@jest-environment node`
-- **Mocking Strategy**: You don't need to mock the API function itself - focus on mocking internal dependencies
-
-### Performance Considerations
-
-- Tests run in Node.js environment (not browser runtime)
-- Compatible with Node 20 stable
-- Isolated testing environment prevents interference between tests
-
-### Security Implications
-
-- API routes tested in isolation from browser environment
-- Request/response handling validated at the function level
-- Proper error handling can be tested without exposing sensitive information
-
-## 2. Supertest Coverage of Express Error Branches
-
-### Overview
-Supertest provides comprehensive testing capabilities for Express applications with focus on achieving high test coverage for error handling scenarios.
-
-### Best Practices
-
-#### Comprehensive Error Branch Testing
+### Jest Configuration for Node 20
 ```javascript
-// Achieving 100% branch coverage
---branches 100  // Enforces complete branch coverage
+// jest.config.js
+module.exports = {
+  testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
+  moduleNameMapping: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
+};
 ```
 
-**Key Strategy**: Test every decision point and conditional logic path, especially error scenarios.
+### Best Practices
+- Always use `@jest-environment node` for API route tests
+- Mock external dependencies (databases, APIs) not the route handlers themselves
+- Test both success and error paths
+- Validate both status codes and response structure
 
-#### Testing Structure for Error Handling
+---
+
+## 2. Supertest Coverage for Express Error Branches
+
+### Comprehensive Error Testing Strategy
+
 ```javascript
-describe('Error Handling', () => {
+import request from 'supertest';
+import app from '../app';
+
+describe('Error Handling Coverage', () => {
+  // Test middleware error handling
   it('should handle validation errors', async () => {
     const response = await request(app)
       .post('/api/users')
-      .send(invalidData)
+      .send({ invalidField: 'value' })
       .expect(400);
     
-    expect(response.body.error).toBeDefined();
+    expect(response.body.error).toBe('Validation failed');
+    expect(response.body.details).toBeDefined();
   });
-  
-  it('should handle authorization errors', async () => {
+
+  // Test database connection errors
+  it('should handle database errors', async () => {
+    // Mock database to throw error
+    jest.spyOn(db, 'query').mockRejectedValueOnce(new Error('DB connection failed'));
+    
+    const response = await request(app)
+      .get('/api/users')
+      .expect(500);
+    
+    expect(response.body.error).toBe('Internal server error');
+  });
+
+  // Test authentication errors
+  it('should handle unauthorized access', async () => {
     const response = await request(app)
       .get('/api/protected')
       .expect(401);
+    
+    expect(response.body.error).toBe('Unauthorized');
+  });
+
+  // Test rate limiting
+  it('should handle rate limiting', async () => {
+    // Make multiple requests to trigger rate limit
+    const promises = Array(10).fill().map(() => 
+      request(app).get('/api/limited-endpoint')
+    );
+    
+    const responses = await Promise.all(promises);
+    const rateLimited = responses.some(res => res.status === 429);
+    expect(rateLimited).toBe(true);
   });
 });
 ```
 
-#### Supertest HTTP Server Testing
+### Error Middleware Testing Pattern
 ```javascript
-// Supertest automatically handles server lifecycle
-const request = require('supertest');
-const app = require('../app');
+// Test error middleware directly
+describe('Error Middleware', () => {
+  it('should format validation errors correctly', () => {
+    const mockError = new ValidationError('Field required');
+    const mockReq = {};
+    const mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+    const mockNext = jest.fn();
 
-// No need to manage ports - Supertest handles ephemeral ports
+    errorHandler(mockError, mockReq, mockRes, mockNext);
+    
+    expect(mockRes.status).toHaveBeenCalledWith(400);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      error: 'Validation failed',
+      message: 'Field required'
+    });
+  });
+});
 ```
 
-### Testing Strategies
+### Coverage Configuration
+```javascript
+// package.json
+{
+  "scripts": {
+    "test:coverage": "jest --coverage --coverageThreshold='{\"global\":{\"branches\":90,\"functions\":90,\"lines\":90,\"statements\":90}}'"
+  },
+  "jest": {
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/test/**/*.js"
+    ],
+    "coverageReporters": ["text", "lcov", "html"]
+  }
+}
+```
 
-#### Branch Coverage Implementation
-- **Statement Coverage**: Every line of code executed
-- **Branch Coverage**: Every decision point tested (if/else, switch cases)
-- **Path Coverage**: Every possible execution path tested
+### Testing Strategies for 100% Branch Coverage
+- Mock external dependencies to simulate failures
+- Test all conditional branches (if/else, switch cases)
+- Test async error scenarios with Promise.reject
+- Use try/catch blocks in tests to verify error handling
+- Test edge cases and boundary conditions
 
-#### Error Scenario Validation
-1. **Function Exit Validation**: Ensure errors throw appropriately
-2. **API Contract Validation**: Verify error response format matches specification
-3. **HTTP Status Code Validation**: Confirm appropriate status codes for different error types
-
-### Common Pitfalls and Solutions
-
-- **Incomplete Branch Coverage**: Use coverage tools like `nyc` with `--reporter=text` and `--reporter=lcov`
-- **Mocking Issues**: Refactor to separate modules for better testability
-- **Complex Error Paths**: Break down complex error handling into smaller, testable units
-
-### Performance Considerations
-
-- Automated testing improves long-term maintainability
-- Integration tests validate module interactions
-- Proper test structure reduces debugging time
-
-### Security Implications
-
-- Comprehensive error testing prevents information leakage
-- Validates proper error handling doesn't expose sensitive data
-- Ensures consistent error responses across the application
+---
 
 ## 3. Terraform ECS Fargate + ALB Baseline
 
-### Overview
-Infrastructure as Code pattern for deploying containerized applications using AWS ECS Fargate with Application Load Balancer for scalable, serverless container orchestration.
+### Core Infrastructure Components
 
-### Best Practices
-
-#### Core Infrastructure Components
-
-##### 1. Networking Foundation
 ```hcl
-# VPC with proper subnet configuration
+# VPC and Networking
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
+  
+  tags = {
+    Name = "${var.project_name}-vpc"
+  }
 }
 
-# Private subnets for ECS tasks
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.${count.index + 1}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
+  
+  tags = {
+    Name = "${var.project_name}-private-${count.index + 1}"
+  }
 }
 
-# Public subnets for ALB
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.${count.index + 101}.0/24"
+  cidr_block              = "10.0.${count.index + 10}.0/24"
   availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "${var.project_name}-public-${count.index + 1}"
+  }
 }
 ```
 
-##### 2. Security Groups
+### Application Load Balancer Configuration
 ```hcl
-# ALB Security Group
+resource "aws_lb" "main" {
+  name               = "${var.project_name}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = aws_subnet.public[*].id
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "${var.project_name}-alb"
+  }
+}
+
+resource "aws_lb_target_group" "app" {
+  name        = "${var.project_name}-tg"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "${var.project_name}-tg"
+  }
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+```
+
+### ECS Fargate Service Configuration
+```hcl
+resource "aws_ecs_cluster" "main" {
+  name = "${var.project_name}-cluster"
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+
+  tags = {
+    Name = "${var.project_name}-cluster"
+  }
+}
+
+resource "aws_ecs_task_definition" "app" {
+  family                   = "${var.project_name}-task"
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn           = aws_iam_role.ecs_task_role.arn
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+
+  container_definitions = jsonencode([
+    {
+      name  = "${var.project_name}-app"
+      image = "${var.app_image}"
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+          protocol      = "tcp"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+      environment = [
+        {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+      ]
+    }
+  ])
+
+  tags = {
+    Name = "${var.project_name}-task"
+  }
+}
+
+resource "aws_ecs_service" "main" {
+  name            = "${var.project_name}-service"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.app.arn
+  desired_count   = 2
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    subnets          = aws_subnet.private[*].id
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app.arn
+    container_name   = "${var.project_name}-app"
+    container_port   = 3000
+  }
+
+  depends_on = [aws_lb_listener.front_end]
+
+  tags = {
+    Name = "${var.project_name}-service"
+  }
+}
+```
+
+### Security Groups
+```hcl
 resource "aws_security_group" "alb" {
-  name_prefix = "alb-sg"
+  name        = "${var.project_name}-alb-sg"
+  description = "Security group for ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -210,339 +381,339 @@ resource "aws_security_group" "alb" {
   }
 
   ingress {
+    description = "HTTPS"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-alb-sg"
+  }
 }
 
-# ECS Security Group
 resource "aws_security_group" "ecs_tasks" {
-  name_prefix = "ecs-tasks-sg"
+  name        = "${var.project_name}-ecs-tasks-sg"
+  description = "Security group for ECS tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 80
-    to_port         = 80
+    description     = "inbound from ALB"
+    from_port       = 3000
+    to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
-}
-```
 
-##### 3. ECS Fargate Configuration
-```hcl
-resource "aws_ecs_cluster" "main" {
-  name = "app-cluster"
-  
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
-}
 
-resource "aws_ecs_task_definition" "app" {
-  family                   = "app-task"
-  requires_compatibilities = ["FARGATE"]
-  network_mode            = "awsvpc"
-  cpu                     = 256
-  memory                  = 512
-  execution_role_arn      = aws_iam_role.ecs_execution_role.arn
-  task_role_arn           = aws_iam_role.ecs_task_role.arn
-
-  container_definitions = jsonencode([{
-    name  = "app"
-    image = "nginx:latest"
-    portMappings = [{
-      containerPort = 80
-      protocol      = "tcp"
-    }]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.ecs.name
-        awslogs-region        = var.aws_region
-        awslogs-stream-prefix = "ecs"
-      }
-    }
-  }])
-}
-```
-
-##### 4. Application Load Balancer
-```hcl
-resource "aws_lb" "main" {
-  name               = "app-alb"
-  load_balancer_type = "application"
-  subnets            = aws_subnet.public[*].id
-  security_groups    = [aws_security_group.alb.id]
-}
-
-resource "aws_lb_target_group" "app" {
-  name        = "app-tg"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"  # Important for Fargate
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
+  tags = {
+    Name = "${var.project_name}-ecs-tasks-sg"
   }
 }
 ```
 
-### Modular Architecture Pattern
-```
-├── backend.tf          # S3 + DynamoDB for remote state
-├── main.tf            # Root config orchestrating modules
-├── outputs.tf         # Outputs (ALB DNS, VPC ID, etc.)
-├── variables.tf       # Global variables
-├── modules/
-│   ├── networking/    # VPC, subnets, security groups
-│   ├── ecs/          # ECS cluster, services, tasks
-│   ├── alb/          # Load balancer configuration
-│   └── monitoring/   # CloudWatch, alarms
-```
+### Key Considerations
+- **Fargate Networking**: Host port must match container port
+- **Target Group**: Use `target_type = "ip"` for Fargate
+- **Security**: Deploy containers in private subnets
+- **Health Checks**: Configure proper health check endpoints
+- **Auto Scaling**: Add auto scaling policies for production
 
-### Common Pitfalls and Solutions
-
-- **Target Group Type**: Must use `target_type = "ip"` for Fargate (not "instance")
-- **Service Discovery**: Implement proper service mesh for microservices communication
-- **Resource Sizing**: Start with smaller CPU/memory allocations and scale up based on metrics
-
-### Performance Considerations
-
-- **Auto-scaling**: Implement ECS service auto-scaling based on CPU/memory metrics
-- **Multi-AZ Deployment**: Distribute tasks across availability zones for high availability
-- **Container Insights**: Enable for detailed monitoring and performance optimization
-
-### Security Implications
-
-- **Network Isolation**: ECS tasks in private subnets, ALB in public subnets
-- **IAM Roles**: Separate execution and task roles with least privilege principle
-- **Security Groups**: Restrictive rules allowing only necessary traffic
+---
 
 ## 4. Cognito PKCE SPA + JWKS Verification Patterns
 
-### Overview
-Secure authentication implementation for Single Page Applications using AWS Cognito with Proof Key for Code Exchange (PKCE) and JSON Web Key Set (JWKS) verification.
+### PKCE Implementation for SPAs
 
-### Best Practices
-
-#### PKCE Implementation for SPAs
-
-##### Authorization Code Flow with PKCE
 ```javascript
-// Generate code verifier and challenge
+// PKCE Helper Functions
+import crypto from 'crypto';
+
 function generateCodeVerifier() {
-  const array = new Uint32Array(56/2);
-  crypto.getRandomValues(array);
-  return Array.from(array, dec => ('0' + dec.toString(16)).substr(-2)).join('');
+  return crypto.randomBytes(32).toString('base64url');
 }
 
 function generateCodeChallenge(codeVerifier) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(codeVerifier);
-  return crypto.subtle.digest('SHA-256', data)
-    .then(digest => {
-      return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-    });
+  return crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64url');
 }
 
-// Authorization request
-const authUrl = `https://<your-domain>.auth.<region>.amazoncognito.com/oauth2/authorize?` +
-  `response_type=code&` +
-  `client_id=${clientId}&` +
-  `redirect_uri=${redirectUri}&` +
-  `code_challenge=${codeChallenge}&` +
-  `code_challenge_method=S256&` +
-  `scope=openid profile email`;
-```
-
-##### Token Exchange
-```javascript
-// Exchange authorization code for tokens
-async function exchangeCodeForTokens(authorizationCode, codeVerifier) {
-  const response = await fetch('https://<your-domain>.auth.<region>.amazoncognito.com/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: clientId,
-      code: authorizationCode,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier  // Plain text verifier
-    })
-  });
-  
-  return response.json();
-}
-```
-
-#### JWKS Verification Implementation
-
-##### JWKS Endpoint and Caching
-```javascript
-// Construct JWKS URI
-const jwksUri = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
-
-// Cache implementation
-class JWKSCache {
-  constructor() {
-    this.cache = new Map();
-    this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
+// Authentication Flow
+class CognitoAuth {
+  constructor(config) {
+    this.userPoolId = config.userPoolId;
+    this.clientId = config.clientId;
+    this.domain = config.domain;
+    this.redirectUri = config.redirectUri;
+    this.region = config.region;
   }
 
-  async getKey(kid) {
-    const cached = this.cache.get(kid);
-    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
-      return cached.key;
-    }
-
-    // Fetch fresh JWKS
-    const response = await fetch(jwksUri);
-    const jwks = await response.json();
+  async initiateAuth() {
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
     
-    // Cache all keys
-    jwks.keys.forEach(key => {
-      this.cache.set(key.kid, {
-        key: key,
-        timestamp: Date.now()
-      });
+    // Store code verifier for later use
+    sessionStorage.setItem('code_verifier', codeVerifier);
+    
+    const authUrl = new URL(`${this.domain}/oauth2/authorize`);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('client_id', this.clientId);
+    authUrl.searchParams.set('redirect_uri', this.redirectUri);
+    authUrl.searchParams.set('scope', 'openid email profile');
+    authUrl.searchParams.set('code_challenge', codeChallenge);
+    authUrl.searchParams.set('code_challenge_method', 'S256');
+    
+    window.location.href = authUrl.toString();
+  }
+
+  async exchangeCodeForTokens(authCode) {
+    const codeVerifier = sessionStorage.getItem('code_verifier');
+    sessionStorage.removeItem('code_verifier');
+    
+    const tokenResponse = await fetch(`${this.domain}/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: this.clientId,
+        code: authCode,
+        redirect_uri: this.redirectUri,
+        code_verifier: codeVerifier,
+      }),
     });
-
-    return this.cache.get(kid)?.key;
+    
+    if (!tokenResponse.ok) {
+      throw new Error('Token exchange failed');
+    }
+    
+    return await tokenResponse.json();
   }
 }
 ```
 
-##### Token Verification with aws-jwt-verify
-```javascript
-import { CognitoJwtVerifier } from "aws-jwt-verify";
+### JWKS Token Verification
 
-// Create the verifier outside your Lambda handler
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: "us-east-1_VfvwDdHph",
-  tokenUse: "access", // or "id"
-  clientId: "7471gd82vtv9rrbhq8aiq6ofn",
-});
-
-// Verify token
-async function verifyToken(token) {
-  try {
-    const payload = await verifier.verify(token);
-    console.log("Token is valid. Payload:", payload);
-    return payload;
-  } catch (error) {
-    console.log("Token not valid:", error);
-    throw error;
-  }
-}
-```
-
-##### Manual JWKS Verification
 ```javascript
 import jwt from 'jsonwebtoken';
 import jwkToPem from 'jwk-to-pem';
 
-async function verifyJWT(token) {
-  // Decode header to get kid
-  const decodedHeader = jwt.decode(token, { complete: true }).header;
-  const kid = decodedHeader.kid;
-
-  // Get JWK for kid
-  const jwk = await jwksCache.getKey(kid);
-  if (!jwk) {
-    throw new Error('Public key not found');
+class TokenValidator {
+  constructor(userPoolId, region) {
+    this.userPoolId = userPoolId;
+    this.region = region;
+    this.jwksUri = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+    this.jwksCache = new Map();
+    this.cacheExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
   }
 
-  // Convert JWK to PEM
-  const pem = jwkToPem(jwk);
+  async getJWKS() {
+    if (this.jwksCache.size > 0 && Date.now() < this.cacheExpiry) {
+      return this.jwksCache;
+    }
 
-  // Verify token
-  return jwt.verify(token, pem, {
-    algorithms: ['RS256'],
-    issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
-    audience: clientId
-  });
+    try {
+      const response = await fetch(this.jwksUri);
+      const jwks = await response.json();
+      
+      // Cache the JWKs
+      this.jwksCache.clear();
+      jwks.keys.forEach(key => {
+        this.jwksCache.set(key.kid, key);
+      });
+      
+      this.cacheExpiry = Date.now() + (24 * 60 * 60 * 1000);
+      return this.jwksCache;
+    } catch (error) {
+      throw new Error('Failed to fetch JWKS');
+    }
+  }
+
+  async verifyToken(token) {
+    try {
+      // Decode token header to get kid
+      const decodedHeader = jwt.decode(token, { complete: true });
+      if (!decodedHeader || !decodedHeader.header.kid) {
+        throw new Error('Invalid token structure');
+      }
+
+      const kid = decodedHeader.header.kid;
+      const jwks = await this.getJWKS();
+      const jwk = jwks.get(kid);
+      
+      if (!jwk) {
+        throw new Error('JWK not found for kid');
+      }
+
+      // Convert JWK to PEM
+      const pem = jwkToPem(jwk);
+      
+      // Verify token
+      const decoded = jwt.verify(token, pem, {
+        algorithms: ['RS256'],
+        issuer: `https://cognito-idp.${this.region}.amazonaws.com/${this.userPoolId}`,
+        audience: this.clientId
+      });
+
+      return decoded;
+    } catch (error) {
+      throw new Error(`Token verification failed: ${error.message}`);
+    }
+  }
+
+  async validateAccessToken(accessToken) {
+    const decoded = await this.verifyToken(accessToken);
+    
+    // Additional validation for access tokens
+    if (decoded.token_use !== 'access') {
+      throw new Error('Invalid token use');
+    }
+    
+    if (decoded.exp < Date.now() / 1000) {
+      throw new Error('Token expired');
+    }
+    
+    return decoded;
+  }
+
+  async validateIdToken(idToken) {
+    const decoded = await this.verifyToken(idToken);
+    
+    // Additional validation for ID tokens
+    if (decoded.token_use !== 'id') {
+      throw new Error('Invalid token use');
+    }
+    
+    return decoded;
+  }
 }
 ```
 
-### Common Pitfalls and Solutions
+### React Implementation with OIDC Context
 
-#### Security Considerations
-- **Token Tampering**: JWTs can be decoded and modified - always verify signatures
-- **Key Rotation**: Implement proper JWKS caching with refresh capabilities
-- **PKCE Verification**: Ensures authorization code hasn't been intercepted
-
-#### Implementation Issues
-- **Cache Management**: Balance between security and performance with appropriate TTL
-- **Error Handling**: Implement proper fallback for key rotation scenarios
-- **Token Lifetime**: Use short-lived tokens with refresh mechanisms
-
-### Performance Considerations
-
-- **JWKS Caching**: Cache public keys using `kid` as cache key
-- **Token Validation**: Use AWS JWT Verify library for optimized validation
-- **Lambda@Edge**: Implement token validation at edge for reduced latency
-
-### Security Implications
-
-#### PKCE Benefits
-- **Code Interception Protection**: PKCE prevents authorization code interception attacks
-- **Dynamic Secret Generation**: Each authentication flow uses unique code verifier
-- **No Client Secret Required**: Suitable for public clients (SPAs)
-
-#### JWKS Security
-- **Signature Verification**: Ensures token integrity and authenticity
-- **Issuer Validation**: Prevents token replay attacks from other sources
-- **Audience Validation**: Ensures tokens are intended for your application
-
-#### API Gateway Integration
 ```javascript
-// Built-in Cognito User Pool Authorizer
-const authorizer = {
-  type: 'COGNITO_USER_POOLS',
-  providerARNs: [`arn:aws:cognito-idp:${region}:${accountId}:userpool/${userPoolId}`],
-  identitySource: 'method.request.header.Authorization'
+import { AuthProvider } from 'react-oidc-context';
+
+const cognitoConfig = {
+  authority: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+  client_id: clientId,
+  redirect_uri: `${window.location.origin}/callback`,
+  response_type: 'code',
+  scope: 'openid email profile',
+  
+  // PKCE configuration
+  code_challenge_method: 'S256',
+  
+  // Additional security settings
+  automaticSilentRenew: true,
+  silentRequestTimeoutInSeconds: 30,
+  
+  // Metadata for JWKS endpoint
+  metadata: {
+    issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+    authorization_endpoint: `${cognitoDomain}/oauth2/authorize`,
+    token_endpoint: `${cognitoDomain}/oauth2/token`,
+    userinfo_endpoint: `${cognitoDomain}/oauth2/userInfo`,
+    jwks_uri: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`,
+  }
 };
+
+function App() {
+  return (
+    <AuthProvider {...cognitoConfig}>
+      <Main />
+    </AuthProvider>
+  );
+}
+
+function Main() {
+  const auth = useAuth();
+
+  React.useEffect(() => {
+    if (auth.isAuthenticated) {
+      // Validate tokens
+      const tokenValidator = new TokenValidator(userPoolId, region);
+      
+      tokenValidator.validateAccessToken(auth.user.access_token)
+        .then(decoded => {
+          console.log('Access token valid:', decoded);
+        })
+        .catch(error => {
+          console.error('Token validation failed:', error);
+          auth.signoutRedirect();
+        });
+    }
+  }, [auth.isAuthenticated]);
+
+  if (auth.isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (auth.error) {
+    return <div>Authentication error: {auth.error.message}</div>;
+  }
+
+  if (!auth.isAuthenticated) {
+    return <button onClick={auth.signinRedirect}>Sign In</button>;
+  }
+
+  return (
+    <div>
+      <h1>Welcome {auth.user?.profile?.email}</h1>
+      <button onClick={auth.signoutRedirect}>Sign Out</button>
+    </div>
+  );
+}
 ```
 
-## Practical Takeaways for Implementation
+### Security Best Practices
 
-### 1. Next.js API Testing
-- Always use `@jest-environment node` for API route tests
-- Consider `next-test-api-route-handler` for comprehensive testing
-- Focus on testing business logic rather than mocking framework internals
+1. **PKCE Implementation**:
+   - Always use PKCE for public clients (SPAs)
+   - Generate cryptographically secure code verifiers
+   - Store code verifier securely (sessionStorage, not localStorage)
 
-### 2. Express Error Coverage
-- Implement systematic branch coverage testing
-- Use Supertest for comprehensive HTTP testing
-- Organize tests to cover all error scenarios systematically
+2. **Token Management**:
+   - Implement automatic token refresh
+   - Validate tokens on both client and server
+   - Handle token rotation gracefully
 
-### 3. ECS Fargate Infrastructure
-- Use modular Terraform structure for maintainability
-- Implement proper security groups and network isolation
-- Enable auto-scaling and monitoring from the start
+3. **JWKS Handling**:
+   - Cache JWKS responses with appropriate TTL
+   - Handle key rotation scenarios
+   - Validate token issuer and audience claims
 
-### 4. Cognito Authentication
-- Always use PKCE for SPAs (not implicit flow)
-- Implement proper JWKS caching strategy
-- Use AWS JWT Verify library for production applications
-- Integrate with API Gateway for seamless authorization
+4. **Additional Security**:
+   - Use HTTPS for all communications
+   - Implement proper CORS policies
+   - Consider using secure, HttpOnly cookies for refresh tokens via backend proxy
 
-These patterns provide robust, secure, and scalable foundations for modern web application development with comprehensive testing and infrastructure management strategies.
+---
+
+## Summary
+
+These patterns provide production-ready implementations for:
+
+1. **Next.js API Testing**: Stable Jest patterns for Node 20 with proper error handling
+2. **Express Coverage**: Comprehensive strategies for testing all error branches
+3. **ECS Infrastructure**: Complete Terraform baseline for Fargate + ALB deployment
+4. **Cognito Authentication**: Secure PKCE + JWKS patterns for SPAs
+
+Each pattern includes security considerations, performance optimizations, and production-ready configurations suitable for enterprise applications.
