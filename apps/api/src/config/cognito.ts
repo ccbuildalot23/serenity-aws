@@ -31,7 +31,6 @@ export const jwksClientInstance = cognitoConfig.isDevelopment ? null : jwksClien
   cache: true,
   rateLimit: true,
   jwksRequestsPerMinute: 10,
-  strictSsl: true,
 });
 
 // JWT issuer for token verification
@@ -66,7 +65,8 @@ export const isValidRole = (role: string): role is keyof typeof userGroups => {
 
 export const hasPermission = (userRole: string, permission: string): boolean => {
   if (!isValidRole(userRole)) return false;
-  return rolePermissions[userRole].includes(permission as any);
+  const permissions = rolePermissions[userRole];
+  return (permissions as readonly string[]).includes(permission);
 };
 
 // Development mode mock configuration

@@ -7,7 +7,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:prod": "prisma migrate deploy",
-    "db:seed": "tsx src/seed.ts",
+    "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio",
     "test:unit": "echo 'No unit tests for database package'",
     "test:integration": "echo 'No integration tests for database package'"
@@ -20,5 +20,8 @@
     "tsx": "^4.7.0",
     "@types/node": "^20.10.5",
     "typescript": "^5.3.3"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
