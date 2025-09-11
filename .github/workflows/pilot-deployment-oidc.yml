@@ -1,0 +1,47 @@
+name: Pilot Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target env"
+        required: true
+        default: "pilot"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pilot-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: CDK Deploy (${{ github.event.inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: pilot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN_PILOT }}
+          aws-region: us-east-1
+
+      - name: Install CDK & deps
+        run: npm i -g aws-cdk && npm ci
+
+      - name: CDK diff (sanity)
+        working-directory: infrastructure
+        run: npx cdk diff --all --concurrency 4 || true
+
+      - name: CDK deploy (no prompts)
+        working-directory: infrastructure
+        run: npx cdk deploy --all --require-approval never --concurrency 4
