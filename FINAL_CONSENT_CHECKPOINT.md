@@ -221,7 +221,7 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 - Coverage: 75.16% statements ✅
 
 **Workflow Verification:**
-- CI Job "Run web-phase2 compliance tests": ✅ [Run 17584654488](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17584654488)
+- CI Job "Run web-phase2 compliance tests": ✅ [Run 17630457297](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17630457297)
 - Nightly Job "PHI Protection E2E Tests": ✅ [Run 17601323821](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17601323821)
 
 ---

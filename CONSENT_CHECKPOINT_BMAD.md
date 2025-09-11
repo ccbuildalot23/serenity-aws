@@ -13,7 +13,7 @@
 |---------------|------------|--------------|--------------|
 | **web-phase2 auth** | 18/18 PASS | ✅ **18/18 PASS** | Both route test files verified |
 | **API coverage** | ≥75% | ✅ **75.16%** | `apps/api/coverage/coverage-final.json` |
-| **CI verified** | web-phase2 tests job | ✅ **CONFIGURED** | [Run 17584654488](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17584654488) |
+| **CI verified** | web-phase2 tests job | ✅ **CONFIGURED** | [Run 17630457297](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17630457297) |
 | **Nightly verified** | PHI E2E tests job | ✅ **CONFIGURED** | [Run 17601323821](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17601323821) |
 | **Release notes** | Artifact-honest | ✅ **UPDATED** | Current session metrics confirmed |
 
