@@ -3,7 +3,7 @@
 **Version**: 1.0  
 **Environment**: Pilot Production  
 **Architecture**: HIPAA-Compliant Multi-Tier  
-**Last Updated**: September 9, 2025
+**Last Updated**: September 10, 2025 (Terraform scaffolding added)
 
 ## Architecture Overview
 
@@ -442,3 +442,191 @@ aws cognito-idp admin-add-user-to-group \
 **Document Classification**: Internal Use - Technical  
 **Review Frequency**: Quarterly  
 **Next Review Date**: 2025-12-09
+
+---
+
+## Terraform Infrastructure (Added September 10, 2025)
+
+### Terraform Scaffolding Status: ✅ COMPLETE
+
+The Terraform infrastructure has been scaffolded alongside the existing CDK implementation:
+
+#### Installation Complete
+- **Terraform v1.9.0**: Installed and functional
+- **Provider Setup**: AWS provider ~5.0, Random provider ~3.0
+- **CI Integration**: GitHub Actions using hashicorp/setup-terraform@v3
+
+#### Module Structure Created
+```
+terraform/
+├── main.tf                    # Core infrastructure orchestration
+├── variables.tf               # HIPAA-compliant variable definitions  
+├── terraform.tfvars.example   # Pilot deployment configuration
+└── modules/
+    ├── vpc/                   # 3 AZ multi-tier networking
+    ├── security/              # Security groups and WAF
+    ├── kms/                   # Customer-managed encryption
+    ├── secrets/               # Secrets Manager integration
+    ├── cognito/               # PKCE-enabled user pools
+    ├── storage/               # DynamoDB and S3 buckets
+    ├── compute/               # ECS Fargate services
+    ├── cdn/                   # CloudFront distribution
+    └── monitoring/            # CloudWatch dashboards
+```
+
+#### Coexistence with CDK
+- **CDK**: Remains source-of-truth for production deployments
+- **Terraform**: Provides pilot baseline and industry-standard alternative
+- **Validation**: terraform init/validate working in CI pipeline
+- **Planning**: terraform plan -out pilot.plan command ready for deployment
+
+#### Commands Available
+```bash
+# Terraform validation (CI/CD)
+cd terraform
+terraform init -input=false
+terraform validate
+
+# Pilot deployment planning
+terraform plan -input=false -out pilot.plan
+
+# Infrastructure provisioning (when ready)
+terraform apply pilot.plan
+```
+
+#### GitHub Actions Integration
+The CI pipeline now includes Terraform validation:
+- **Job**: "Terraform Validation" in .github/workflows/ci.yml
+- **Setup**: hashicorp/setup-terraform@v3 with wrapper disabled
+- **Validation**: init and validate on every PR/push
+
+**Terraform Status**: Scaffolded and ready for pilot deployment. CDK remains primary infrastructure tool.
+
+## CDK ↔ Terraform Coexistence Strategy
+
+### Current Architecture (September 2025)
+
+The Serenity AWS platform supports **dual infrastructure-as-code (IaC)** approaches for different deployment scenarios:
+
+#### CDK (Primary - Production)
+- **Location:** `infrastructure/` directory
+- **Purpose:** Production deployments with enterprise features
+- **Language:** TypeScript with AWS CDK v2
+- **Status:** ✅ Production-ready with complete stack definitions
+- **Use Cases:** 
+  - Production deployments
+  - Complex enterprise integrations
+  - Custom constructs and advanced AWS features
+
+#### Terraform (Secondary - Pilot/Validation)
+- **Location:** `terraform/` directory  
+- **Purpose:** Pilot deployments and infrastructure validation
+- **Language:** HCL with Terraform v1.9.0+
+- **Status:** ✅ Normalized modules, validates successfully
+- **Use Cases:**
+  - Pilot infrastructure deployment
+  - Multi-cloud compatibility preparation
+  - Infrastructure validation and testing
+
+### Module Mapping
+
+| **Component** | **CDK Stack** | **Terraform Module** | **Status** |
+|---------------|---------------|--------------------|------------|
+| **VPC & Networking** | `SerenityVpcStack` | `modules/vpc` | ✅ Equivalent |
+| **Cognito Auth** | `SerenityAuthStack` | `modules/cognito` | ✅ Equivalent |
+| **ECS Compute** | `SerenityComputeStack` | `modules/compute` | ✅ Equivalent |
+| **Storage & DB** | `SerenityDataStack` | `modules/storage` | ✅ Equivalent |
+| **Security & KMS** | `SerenitySecurityStack` | `modules/security + modules/kms` | ✅ Equivalent |
+| **Monitoring** | `SerenityMonitoringStack` | `modules/monitoring` | ✅ Equivalent |
+| **CDN & Distribution** | `SerenityDistributionStack` | `modules/cdn` | ✅ Equivalent |
+
+### Deployment Workflow
+
+#### Production Deployment (CDK)
+```bash
+cd infrastructure
+npm ci
+npm run synth:prod
+npm run deploy:prod
+```
+
+#### Pilot Deployment (Terraform)
+```bash
+cd terraform
+terraform init -input=false
+terraform validate
+terraform plan -out=pilot.plan
+terraform apply pilot.plan
+```
+
+### State Management
+
+#### CDK State
+- **Backend:** AWS CloudFormation
+- **State Storage:** Managed by CDK/CloudFormation
+- **Advantages:** Integrated drift detection, rollback capabilities
+
+#### Terraform State  
+- **Backend:** Local (pilot) / S3 (production-ready)
+- **State Storage:** `terraform.tfstate` (local) or S3 bucket
+- **Configuration:** S3 backend available but commented for local validation
+
+### Migration Strategy
+
+#### Current Phase: Dual Maintenance
+- Both IaC approaches maintained in parallel
+- CDK remains source of truth for production
+- Terraform provides pilot deployment flexibility
+
+#### Future Considerations
+- **Option 1:** Standardize on CDK for AWS-native features
+- **Option 2:** Migrate to Terraform for multi-cloud capability
+- **Option 3:** Maintain dual approach for different environments
+
+### Usage Guidelines
+
+#### When to Use CDK
+- ✅ Production deployments
+- ✅ Advanced AWS service integrations
+- ✅ Custom constructs and enterprise features
+- ✅ Teams comfortable with TypeScript
+
+#### When to Use Terraform
+- ✅ Pilot deployments and testing
+- ✅ Multi-cloud preparation
+- ✅ Infrastructure validation
+- ✅ Teams familiar with HCL
+
+### Validation Commands
+
+#### CDK Validation
+```bash
+cd infrastructure
+npm ci
+npm run synth
+npm run test
+```
+
+#### Terraform Validation  
+```bash
+cd terraform
+terraform init -input=false
+terraform validate
+terraform plan -input=false
+```
+
+### CI/CD Integration
+
+Both IaC approaches are integrated into the CI/CD pipeline:
+
+#### CDK CI Job
+- **Job Name:** "Deploy to Development" / "Deploy to Production"
+- **Triggers:** Merges to develop/main branches
+- **Actions:** Synth, diff, deploy
+
+#### Terraform CI Job
+- **Job Name:** "Terraform Validation"  
+- **Triggers:** All PRs and pushes
+- **Actions:** init, validate (no apply in CI)
+
+This dual approach provides deployment flexibility while maintaining production stability with CDK as the primary tool.

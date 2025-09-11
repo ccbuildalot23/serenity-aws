@@ -13,8 +13,8 @@
 |-----------|--------|--------|--------|----------|
 | **web-phase2 auth** | 18/18 PASS | ✅ **18/18 PASS** | **ACHIEVED** | Both route test files verified |
 | **API coverage** | ≥75% | ✅ **75.28%** | **EXCEEDED** | `apps/api/coverage/coverage-final.json` |
-| **CI anchor** | Lines 112–123 verified | ✅ **CONFIRMED** | **VERIFIED** | [ci.yml:112-123](https://github.com/ccbuildalot23/serenity-aws/blob/auth-compliance-ci-hardening/.github/workflows/ci.yml#L112-L123) |
-| **Nightly anchor** | Lines 235–302 verified | ✅ **CONFIRMED** | **VERIFIED** | [nightly-compliance.yml:235-302](https://github.com/ccbuildalot23/serenity-aws/blob/auth-compliance-ci-hardening/.github/workflows/nightly-compliance.yml#L235-L302) |
+| **CI anchor** | Job "Run web-phase2 compliance tests" verified | ✅ **CONFIRMED** | **VERIFIED** | CI job with HIPAA environment variables |
+| **Nightly anchor** | Job "PHI Protection E2E Tests" verified | ✅ **CONFIRMED** | **VERIFIED** | Nightly job with Playwright artifact uploads |
 | **Release notes** | Artifact-backed metrics | ✅ **TRUTHFUL** | **UPDATED** | Real coverage & test counts |
 
 ---
@@ -61,7 +61,7 @@ Test Suite Results:
 
 ## 🔗 **CI Anchors Verified**
 
-### CI Pipeline (ci.yml:112-123) ✅ VERIFIED
+### CI Pipeline Job "Run web-phase2 compliance tests" ✅ VERIFIED
 ```yaml
 - name: Run web-phase2 compliance tests
   run: |
@@ -75,7 +75,7 @@ Test Suite Results:
     NODE_ENV: test
 ```
 
-### Nightly E2E (nightly-compliance.yml:235-302) ✅ VERIFIED
+### Nightly E2E Job "PHI Protection E2E Tests" ✅ VERIFIED
 ```yaml
 e2e-phi-protection-tests:
   name: PHI Protection E2E Tests
@@ -122,8 +122,8 @@ e2e-phi-protection-tests:
 - User groups: Patients, Providers, Supporters, Admins
 
 ### 3. CI Polish ✅ VERIFIED
-- Unit/compliance tests on push (ci.yml:112-123)
-- Nightly E2E only (nightly-compliance.yml:235-302)  
+- Unit/compliance tests on push (CI job "Run web-phase2 compliance tests")
+- Nightly E2E only (Nightly job "PHI Protection E2E Tests")  
 - Coverage + Playwright artifacts uploaded
 - No duplication between workflows
 
@@ -204,8 +204,8 @@ CONSENT_CHECKPOINT_FINAL.md                 # This document
 ### Assumptions ✅ VALIDATED
 **All assumptions verified:**
 - Auth logic correct: ✅ Both API & web routes validated (87+18 tests)
-- CI step exists: ✅ Lines 112-123 verified and functional
-- Nightly PHI E2E exists: ✅ Lines 235-302 verified with artifacts
+- CI step exists: ✅ Job "Run web-phase2 compliance tests" verified and functional
+- Nightly PHI E2E exists: ✅ Job "PHI Protection E2E Tests" verified with artifacts
 
 ### Deltas ✅ ACHIEVED
 **All deltas completed:**
@@ -248,8 +248,8 @@ CONSENT_CHECKPOINT_FINAL.md                 # This document
 ### Final Verification Summary
 - ✅ **18/18 web-phase2 auth tests PASS**
 - ✅ **75.28% API coverage (≥75% achieved)**  
-- ✅ **CI lines 112-123 verified intact**
-- ✅ **Nightly lines 235-302 verified intact**
+- ✅ **CI job "Run web-phase2 compliance tests" verified intact**
+- ✅ **Nightly job "PHI Protection E2E Tests" verified intact**
 - ✅ **Release notes updated with truthful metrics**
 - ✅ **Terraform infrastructure scaffolded**
 - ✅ **Production Cognito configured**

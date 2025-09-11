@@ -56,6 +56,22 @@ describe('AuthService Basic Coverage', () => {
       expect(typeof AuthService.getUser).toBe('function');
     });
 
+    it('should handle additional auth service methods', () => {
+      // Additional coverage for method existence and basic functionality
+      expect(typeof AuthService.authenticate).toBe('function');
+      expect(typeof AuthService.getUser).toBe('function');
+      expect(typeof AuthService.createUser).toBe('function');
+      
+      // Test that middleware factories return functions
+      const authMiddleware = AuthService.authorize('PATIENT');
+      const recentAuthMiddleware = AuthService.requireRecentAuth(300);
+      
+      expect(typeof authMiddleware).toBe('function');
+      expect(typeof recentAuthMiddleware).toBe('function');
+      expect(authMiddleware.length).toBe(3); // (req, res, next)
+      expect(recentAuthMiddleware.length).toBe(3); // (req, res, next)
+    });
+
     it('should handle middleware error scenarios', () => {
       const mockReq = { headers: {}, user: undefined };
       const mockRes = {

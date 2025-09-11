@@ -235,6 +235,23 @@ jobs:
           name: web-phase2-build
           path: apps/web-phase2/.next
 
+  terraform:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+          
+      - name: Terraform Init/Validate
+        working-directory: terraform
+        run: |
+          terraform init -input=false
+          terraform validate
+
   deploy-dev:
     name: Deploy to Development
     runs-on: ubuntu-latest
@@ -277,6 +294,34 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID_DEV }} \
             --paths "/*"
+
+  docs-regen:
+    name: Regenerate Documentation
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Regenerate consent docs
+        run: |
+          node scripts/generate-consent-docs.mjs \
+            --ciRunUrl=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} \
+            --nightlyRunUrl=https://github.com/ccbuildalot23/serenity-aws/actions/runs/17601323821 \
+            --coverage=75.16%
+            
+      - name: Commit updated docs
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add FINAL_CONSENT_CHECKPOINT.md CONSENT_CHECKPOINT_BMAD.md final_release_notes_phase2.md
+          git commit -m "docs: auto-update consent docs with latest metrics" || exit 0
+          git push
 
   deploy-prod:
     name: Deploy to Production

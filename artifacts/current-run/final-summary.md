@@ -11,8 +11,8 @@ Generated: Tue, Sep  9, 2025 10:26:18 AM
 - PHI Timeout: ✅ VERIFIED in route.ts lines 119, 132
 
 ## CI Configuration
-- web-phase2 tests: ✅ CONFIGURED in ci.yml lines 112-123
-- Nightly E2E: ✅ CONFIGURED in nightly-compliance.yml lines 235-312
+- web-phase2 tests: ✅ CONFIGURED in CI job "Run web-phase2 compliance tests"
+- Nightly E2E: ✅ CONFIGURED in Nightly job "PHI Protection E2E Tests"
 
 ## Core HIPAA Claims Verification
 ✅ 15-min PHI timeout enforced in API /me endpoint
