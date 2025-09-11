@@ -506,7 +506,7 @@ export class SerenityPilotStack extends cdk.Stack {
 
     const configDeliveryChannel = new config.CfnDeliveryChannel(this, 'ConfigDeliveryChannel', {
       s3BucketName: auditLogsBucket.bucketName,
-      s3KeyPrefix: 'config-logs/',
+      s3KeyPrefix: 'config-logs',
     });
 
     // ==================== GUARDDUTY ====================
@@ -536,8 +536,8 @@ export class SerenityPilotStack extends cdk.Stack {
             hour: '2',
             minute: '0',
           }),
-          deleteAfter: cdk.Duration.days(35),
-          moveToColdStorageAfter: cdk.Duration.days(30),
+          deleteAfter: cdk.Duration.days(365),
+          moveToColdStorageAfter: cdk.Duration.days(90),
         }),
       ],
     });
