@@ -19,7 +19,13 @@
       "Bash(docker:*)",
       "Bash(choco install:*)",
       "WebFetch(domain:github.com)",
-      "Bash(terraform:*)"
+      "Bash(terraform:*)",
+      "Bash(aws configure set:*)",
+      "Bash(aws configure:*)",
+      "Bash(export AWS_PROFILE=iamadmin)",
+      "Bash(aws sts:*)",
+      "Bash(aws ec2 describe-availability-zones:*)",
+      "Bash(npm run deploy:pilot:*)"
     ],
     "deny": [],
     "ask": []

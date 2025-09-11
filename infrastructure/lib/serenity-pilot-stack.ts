@@ -18,6 +18,7 @@ import * as cloudtrail from 'aws-cdk-lib/aws-cloudtrail';
 import * as guardduty from 'aws-cdk-lib/aws-guardduty';
 import * as config from 'aws-cdk-lib/aws-config';
 import * as backup from 'aws-cdk-lib/aws-backup';
+import * as events from 'aws-cdk-lib/aws-events';
 import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -206,7 +207,6 @@ export class SerenityPilotStack extends cdk.Stack {
       },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       removalPolicy: cdk.RemovalPolicy.RETAIN, // Always retain for pilot
-      advancedSecurityMode: cognito.AdvancedSecurityMode.ENFORCED,
     });
 
     // SPA Client (PKCE for web-phase2)
@@ -390,9 +390,7 @@ export class SerenityPilotStack extends cdk.Stack {
       cpu: 256,
       desiredCount: isProd ? 2 : 1,
       listenerPort: 80,
-      publicLoadBalancer: true,
-      domainName: isProd ? `api.serenityhealth.io` : undefined,
-      domainZone: undefined, // Will be configured with Route53
+      publicLoadBalancer: true
     });
 
     // Configure health checks
@@ -487,9 +485,8 @@ export class SerenityPilotStack extends cdk.Stack {
       enableFileValidation: true,
       sendToCloudWatchLogs: true,
       cloudWatchLogGroup: new logs.LogGroup(this, 'CloudTrailLogGroup', {
-        logGroupName: `/aws/cloudtrail/serenity-${env}`,
+        logGroupName: `/aws/cloudtrail/serenity-${env}-${Date.now()}`,
         retention: logs.RetentionDays.ONE_YEAR,
-        encryptionKey,
       }),
     });
 
@@ -527,21 +524,6 @@ export class SerenityPilotStack extends cdk.Stack {
     const backupVault = new backup.BackupVault(this, 'SerenityBackupVault', {
       backupVaultName: `serenity-${env}-backup-vault`,
       encryptionKey,
-      accessPolicy: new iam.PolicyDocument({
-        statements: [
-          new iam.PolicyStatement({
-            effect: iam.Effect.DENY,
-            principals: [new iam.AnyPrincipal()],
-            actions: ['backup:DeleteBackupVault', 'backup:DeleteBackupPlan', 'backup:DeleteRecoveryPoint'],
-            resources: ['*'],
-            conditions: {
-              StringNotEquals: {
-                'aws:PrincipalServiceName': 'backup.amazonaws.com',
-              },
-            },
-          }),
-        ],
-      }),
     });
 
     const backupPlan = new backup.BackupPlan(this, 'SerenityBackupPlan', {
@@ -550,7 +532,7 @@ export class SerenityPilotStack extends cdk.Stack {
       backupPlanRules: [
         new backup.BackupPlanRule({
           ruleName: 'DailyBackups',
-          scheduleExpression: backup.Schedule.cron({
+          scheduleExpression: events.Schedule.cron({
             hour: '2',
             minute: '0',
           }),
