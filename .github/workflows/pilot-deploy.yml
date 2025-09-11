@@ -1,0 +1,378 @@
+name: Pilot Environment Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      consent:
+        description: 'AWS Resource Management Consent'
+        required: true
+        type: choice
+        options:
+          - 'ABORT'
+          - 'DELETE'
+          - 'IMPORT'
+        default: 'ABORT'
+      confirm_action:
+        description: 'Type exactly: CONFIRM DELETE BACKUP VAULT or CONFIRM IMPORT PLAN'
+        required: false
+        type: string
+        default: ''
+
+env:
+  AWS_REGION: 'us-east-1'
+  NODE_VERSION: '20'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  consent-validation:
+    name: Validate Deployment Consent
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.validate.outputs.action }}
+      proceed: ${{ steps.validate.outputs.proceed }}
+    
+    steps:
+      - name: Validate consent and confirmation
+        id: validate
+        run: |
+          CONSENT="${{ github.event.inputs.consent }}"
+          CONFIRMATION="${{ github.event.inputs.confirm_action }}"
+          
+          echo "🔒 Consent Gate: Pilot Deployment"
+          echo "================================="
+          echo "Selected action: $CONSENT"
+          echo "Confirmation: $CONFIRMATION"
+          
+          if [ "$CONSENT" = "ABORT" ]; then
+            echo "❌ Deployment aborted by user selection"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif [ "$CONSENT" = "DELETE" ]; then
+            if [ "$CONFIRMATION" != "CONFIRM DELETE BACKUP VAULT" ]; then
+              echo "❌ DELETE action requires exact confirmation: 'CONFIRM DELETE BACKUP VAULT'"
+              echo "❌ Received: '$CONFIRMATION'"
+              echo "proceed=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            echo "✅ DELETE action confirmed"
+            echo "action=delete" >> $GITHUB_OUTPUT
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          elif [ "$CONSENT" = "IMPORT" ]; then
+            if [ "$CONFIRMATION" != "CONFIRM IMPORT PLAN" ]; then
+              echo "❌ IMPORT action requires exact confirmation: 'CONFIRM IMPORT PLAN'"
+              echo "❌ Received: '$CONFIRMATION'"
+              echo "proceed=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            echo "✅ IMPORT action confirmed"
+            echo "action=import" >> $GITHUB_OUTPUT
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Invalid consent option: $CONSENT"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  pre-deployment:
+    name: Pre-Deployment Setup
+    runs-on: ubuntu-latest
+    needs: consent-validation
+    if: needs.consent-validation.outputs.proceed == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN_PILOT }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check existing AWS resources
+        id: resource-check
+        run: |
+          echo "🔍 Checking existing AWS resources..."
+          
+          # Check for backup vault
+          BACKUP_VAULT_EXISTS=false
+          if aws backup describe-backup-vault --backup-vault-name serenity-pilot-backup-vault --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+            BACKUP_VAULT_EXISTS=true
+            echo "⚠️  Backup vault 'serenity-pilot-backup-vault' exists"
+          else
+            echo "✅ No existing backup vault found"
+          fi
+          
+          # Check for CloudFormation stacks
+          ROLLBACK_STACKS=$(aws cloudformation describe-stacks --query 'Stacks[?contains(StackName, `pilot`) && StackStatus == `ROLLBACK_COMPLETE`].StackName' --output text --region ${{ env.AWS_REGION }} || echo "")
+          if [ -n "$ROLLBACK_STACKS" ]; then
+            echo "⚠️  Found ROLLBACK_COMPLETE stacks: $ROLLBACK_STACKS"
+            echo "rollback_stacks=$ROLLBACK_STACKS" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No rollback stacks found"
+            echo "rollback_stacks=" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "backup_vault_exists=$BACKUP_VAULT_EXISTS" >> $GITHUB_OUTPUT
+
+  resource-management:
+    name: AWS Resource Management
+    runs-on: ubuntu-latest
+    needs: [consent-validation, pre-deployment]
+    if: needs.consent-validation.outputs.proceed == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN_PILOT }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Delete existing resources
+        if: needs.consent-validation.outputs.action == 'delete'
+        run: |
+          echo "🗑️  Executing DELETE action..."
+          
+          # Delete backup vault recovery points first
+          if [ "${{ needs.pre-deployment.outputs.backup_vault_exists }}" = "true" ]; then
+            echo "Deleting recovery points from serenity-pilot-backup-vault..."
+            aws backup list-recovery-points-by-backup-vault \
+              --backup-vault-name serenity-pilot-backup-vault \
+              --region ${{ env.AWS_REGION }} \
+              --query 'RecoveryPoints[].RecoveryPointArn' \
+              --output text | tr '\t' '\n' | while read -r ARN; do
+                if [ -n "$ARN" ]; then
+                  echo "Deleting recovery point: $ARN"
+                  aws backup delete-recovery-point \
+                    --backup-vault-name serenity-pilot-backup-vault \
+                    --recovery-point-arn "$ARN" \
+                    --region ${{ env.AWS_REGION }} || true
+                fi
+            done
+            
+            # Delete the backup vault
+            echo "Deleting backup vault..."
+            aws backup delete-backup-vault \
+              --backup-vault-name serenity-pilot-backup-vault \
+              --region ${{ env.AWS_REGION }} || {
+                echo "❌ Failed to delete backup vault. It may have a Vault Lock policy."
+                echo "💡 Manual intervention required: Check AWS Console for Vault Lock policies"
+                echo "💡 If Vault Lock is enabled, vault cannot be deleted programmatically"
+                exit 1
+              }
+          fi
+          
+          # Delete ROLLBACK_COMPLETE stacks
+          if [ -n "${{ needs.pre-deployment.outputs.rollback_stacks }}" ]; then
+            echo "Deleting ROLLBACK_COMPLETE stacks..."
+            echo "${{ needs.pre-deployment.outputs.rollback_stacks }}" | tr ' ' '\n' | while read -r stack; do
+              if [ -n "$stack" ]; then
+                echo "Deleting stack: $stack"
+                aws cloudformation delete-stack --stack-name "$stack" --region ${{ env.AWS_REGION }}
+                echo "Waiting for stack deletion to complete..."
+                aws cloudformation wait stack-delete-complete --stack-name "$stack" --region ${{ env.AWS_REGION }} || true
+              fi
+            done
+          fi
+          
+          echo "✅ DELETE action completed"
+
+      - name: Generate import plan
+        if: needs.consent-validation.outputs.action == 'import'
+        run: |
+          echo "📋 Generating IMPORT plan..."
+          
+          IMPORT_PLAN_FILE="docs/import-plan.md"
+          cat > $IMPORT_PLAN_FILE << EOF
+          # AWS Resource Import Plan
+          
+          **Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          **Action**: IMPORT existing resources into CDK management
+          **Status**: PLANNING PHASE - NOT EXECUTED
+          
+          ## Resources to Import
+          
+          ### Backup Vault
+          - **Resource**: serenity-pilot-backup-vault
+          - **Status**: ${{ needs.pre-deployment.outputs.backup_vault_exists }}
+          - **Import Command**: \`cdk import\` (requires manual configuration)
+          
+          ### CloudFormation Stacks
+          - **Rollback Stacks**: ${{ needs.pre-deployment.outputs.rollback_stacks }}
+          - **Action**: Review and potentially recreate rather than import
+          
+          ## Import Process (MANUAL STEPS REQUIRED)
+          
+          1. **Review CDK Stack Definition**
+             - Ensure existing resources match CDK resource definitions
+             - Update resource properties to match existing state
+          
+          2. **Generate Import Template**
+             \`\`\`bash
+             cd infrastructure
+             cdk diff --context env=pilot > import-diff.txt
+             \`\`\`
+          
+          3. **Execute Import (DO NOT RUN AUTOMATICALLY)**
+             \`\`\`bash
+             # Manual review required before execution
+             # cdk import --context env=pilot
+             \`\`\`
+          
+          ## WARNING
+          🚨 **IMPORT ACTION REQUIRES MANUAL EXECUTION**
+          - This plan is informational only
+          - Actual import requires careful review of resource state
+          - Mismatched resource definitions can cause failures
+          - Consider DELETE approach for cleaner deployment
+          
+          ## Next Steps
+          1. Review this plan carefully
+          2. Verify resource definitions in CDK match existing resources
+          3. Execute import manually with proper testing
+          4. OR choose DELETE approach for clean deployment
+          
+          ---
+          *Generated automatically by pilot-deploy.yml workflow*
+          EOF
+          
+          echo "📄 Import plan generated at: $IMPORT_PLAN_FILE"
+          cat $IMPORT_PLAN_FILE
+          
+          echo "⚠️  IMPORT plan complete - manual execution required"
+          echo "⚠️  No automatic import performed"
+
+  pilot-deployment:
+    name: Deploy Pilot Infrastructure
+    runs-on: ubuntu-latest
+    needs: [consent-validation, resource-management]
+    if: needs.consent-validation.outputs.proceed == 'true'
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN_PILOT }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK bootstrap
+        working-directory: infrastructure
+        run: |
+          echo "🚀 Ensuring CDK bootstrap..."
+          npm run bootstrap || echo "Bootstrap may already exist"
+
+      - name: CDK pilot deployment
+        working-directory: infrastructure
+        run: |
+          echo "🚀 Deploying pilot infrastructure..."
+          npm run deploy:pilot 2>&1 | tee pilot-deploy.log
+          
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "✅ Pilot deployment completed successfully"
+          else
+            echo "❌ Pilot deployment failed"
+            exit 1
+          fi
+
+      - name: Capture deployment outputs
+        if: success()
+        working-directory: infrastructure
+        run: |
+          echo "📊 Capturing stack outputs..."
+          STACK_NAMES=(
+            "SerenityPilot-pilot"
+            "SerenityPilotStack"
+            "serenity-pilot-stack"
+          )
+          
+          for stack_name in "${STACK_NAMES[@]}"; do
+            if aws cloudformation describe-stacks --stack-name "$stack_name" --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "Found stack: $stack_name"
+              aws cloudformation describe-stacks \
+                --stack-name "$stack_name" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'Stacks[0].Outputs' \
+                --output json > stack-outputs.json
+              break
+            fi
+          done
+          
+          if [ ! -f stack-outputs.json ]; then
+            echo '{"message": "No stack outputs found"}' > stack-outputs.json
+          fi
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pilot-deployment-artifacts
+          path: |
+            infrastructure/pilot-deploy.log
+            infrastructure/stack-outputs.json
+            docs/import-plan.md
+          retention-days: 90
+
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [consent-validation, pilot-deployment]
+    if: always()
+    
+    steps:
+      - name: Generate deployment summary
+        run: |
+          echo "📋 Pilot Deployment Summary"
+          echo "=========================="
+          echo "Timestamp: $(date -u)"
+          echo "Action: ${{ needs.consent-validation.outputs.action }}"
+          echo "Consent Status: ${{ needs.consent-validation.outputs.proceed }}"
+          echo "Deployment Status: ${{ needs.pilot-deployment.result }}"
+          echo "Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          if [ "${{ needs.pilot-deployment.result }}" = "success" ]; then
+            echo "🎉 Pilot environment deployed successfully!"
+            echo "📊 Check deployment artifacts for stack outputs"
+          elif [ "${{ needs.consent-validation.outputs.proceed }}" = "false" ]; then
+            echo "🛑 Deployment aborted by consent validation"
+          else
+            echo "❌ Deployment failed - check logs for details"
+          fi

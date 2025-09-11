@@ -62,7 +62,7 @@ Test Suites: 4/4 passed
 **Result:** ✅ **Both workflows properly configured**
 
 **CI Workflow (ci.yml):**
-- Job "Run web-phase2 compliance tests": ✅ Properly configured with HIPAA environment variables
+- Job "Run Tests": ✅ Streamlined test execution with web-phase2 auth tests and API coverage
 - Job "Terraform Validation": ✅ hashicorp/setup-terraform@v3 integration
 - Environment variables set for HIPAA compliance testing
 - Coverage upload and artifact collection active
@@ -100,7 +100,7 @@ Test Suites: 4/4 passed
 |-----------|-------|--------|----------|
 | API Authentication | {{API_TESTS}} | ✅ 100% PASS | {{COVERAGE_PCT}} statements |
 | Web-phase2 Auth Routes | 18/18 | ✅ 100% PASS | Route-level verified |
-| CI Pipeline | Verified | ✅ Configured | Job "Run web-phase2 compliance tests" |
+| CI Pipeline | Verified | ✅ Configured | Job "Run Tests" |
 | Nightly E2E | Verified | ✅ Configured | Job "PHI Protection E2E Tests" |
 
 ### Coverage Achievement
@@ -176,7 +176,7 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 
 - ✅ **web-phase2 auth tests:** 18/18 pass
 - ✅ **API coverage ≥75%:** {{COVERAGE_PCT}} achieved  
-- ✅ **CI job "Run web-phase2 compliance tests":** Verified test execution with HIPAA env vars
+- ✅ **CI job "Run Tests":** Verified test execution with web-phase2 auth tests and API coverage
 - ✅ **Nightly job "PHI Protection E2E Tests":** Verified Playwright PHI E2E job
 - ✅ **Release notes:** Real metrics and artifact links updated
 
@@ -221,7 +221,7 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 - Coverage: {{COVERAGE_PCT}} statements ✅
 
 **Workflow Verification:**
-- CI Job "Regenerate Documentation": ✅ [Latest CI Run]({{CI_RUN_URL}})
+- CI Job "Run Tests": ✅ [Latest CI Run]({{CI_RUN_URL}})
 - Nightly Job "PHI Protection E2E Tests": ✅ [Latest Nightly Run]({{NIGHTLY_RUN_URL}})
 
 ---

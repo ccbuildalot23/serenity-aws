@@ -66,6 +66,15 @@ try {
   if (process.env.GITHUB_OUTPUT) {
     writeFileSync(process.env.GITHUB_OUTPUT, `STATEMENTS_PCT=${statementsPct}\n`, { flag: 'a' });
   }
+  
+  // Exit with error code if coverage is below 75%
+  const MINIMUM_COVERAGE = 75.0;
+  if (statementsPct < MINIMUM_COVERAGE) {
+    console.error(`❌ Coverage ${statementsPct}% is below minimum threshold of ${MINIMUM_COVERAGE}%`);
+    process.exit(1);
+  } else {
+    console.log(`✅ Coverage ${statementsPct}% meets minimum threshold of ${MINIMUM_COVERAGE}%`);
+  }
 } catch (error) {
   console.error('Failed to extract coverage:', error);
   process.exit(1);

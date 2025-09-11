@@ -271,14 +271,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
           
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
-          version: 10
-      
-      - name: Install dependencies
-        run: pnpm i -w
+          version: 9
+          run_install: true
       
       - name: Setup test database
         run: |
@@ -287,51 +286,50 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
       
-      - name: Install Playwright browsers
-        run: |
-          cd apps/web-phase2
-          npx playwright install --with-deps
+      - name: Install Playwright with dependencies
+        run: npx playwright install --with-deps
       
-      - name: Build applications
+      - name: Start API server in background
+        working-directory: apps/api
         run: |
-          pnpm run build
-          cd apps/web-phase2
-          pnpm run build
-      
-      - name: Start API server
-        run: |
-          cd apps/api
-          pnpm run dev &
+          pnpm run start &
           echo $! > api.pid
-          sleep 10  # Wait for server to start
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
           JWT_SECRET: test-secret-for-e2e
+          PORT: 3001
       
-      - name: Start web-phase2 server
+      - name: Start Web-phase2 server in background
+        working-directory: apps/web-phase2
         run: |
-          cd apps/web-phase2
-          pnpm run dev &
+          pnpm run start &
           echo $! > web.pid
-          sleep 15  # Wait for Next.js to start
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_MOCK_AUTH: true
           NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
+          PORT: 3000
+      
+      - name: Wait for servers to be ready
+        run: |
+          echo "Waiting for API server (port 3001)..."
+          npx wait-on http://localhost:3001/health --timeout 60000 || (echo "API server failed to start"; exit 1)
+          
+          echo "Waiting for Web server (port 3000)..."
+          npx wait-on http://localhost:3000 --timeout 60000 || (echo "Web server failed to start"; exit 1)
       
       - name: Run PHI Protection E2E Tests
-        run: |
-          cd apps/web-phase2
-          xvfb-run -a npx playwright test tests/e2e/phi-protection.spec.ts --reporter=html
+        working-directory: apps/web-phase2
+        run: pnpm test:e2e -- tests/e2e/phi-protection.spec.ts
         env:
           PLAYWRIGHT_HEADLESS: true
       
-      - name: Upload E2E test results
+      - name: Upload playwright artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-test-results
+          name: playwright-report
           path: |
             apps/web-phase2/playwright-report/
             apps/web-phase2/test-results/

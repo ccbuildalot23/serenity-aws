@@ -20,6 +20,10 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: pilot-deploy
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   AWS_REGION: 'us-east-1'
@@ -89,13 +93,13 @@ jobs:
         working-directory: infrastructure
         run: |
           echo "🔍 Running CDK diff for sanity check..."
-          npx cdk diff --all --concurrency 4 || true
+          npx cdk diff --all --context env=pilot --concurrency 4 || true
       
       - name: Deploy infrastructure
         working-directory: infrastructure
         run: |
           echo "🚀 Deploying infrastructure to ${{ github.event.inputs.environment }}..."
-          npx cdk deploy --all --require-approval never --concurrency 4 2>&1 | tee pilot-deploy.log
+          npx cdk deploy --all --context env=pilot --require-approval never --concurrency 4 2>&1 | tee pilot-deploy.log
           
           # Capture deployment status
           if [ ${PIPESTATUS[0]} -eq 0 ]; then
@@ -143,6 +147,31 @@ jobs:
             infrastructure/pilot-deploy.log
             infrastructure/stack-outputs.json
           retention-days: 30
+      
+      - name: Post-deploy validation
+        if: success()
+        working-directory: infrastructure
+        run: |
+          echo "🧪 Running post-deployment validation..."
+          # Verify stack status
+          STACK_NAMES=(
+            "SerenityPilotStack"
+            "SerenityPilot-pilot"
+            "serenity-pilot-stack"
+            "SerenityStack-pilot"
+          )
+          
+          for stack_name in "${STACK_NAMES[@]}"; do
+            if aws cloudformation describe-stacks --stack-name "$stack_name" > /dev/null 2>&1; then
+              STATUS=$(aws cloudformation describe-stacks --stack-name "$stack_name" --query 'Stacks[0].StackStatus' --output text)
+              echo "Stack $stack_name status: $STATUS"
+              if [[ "$STATUS" == *"_COMPLETE" ]]; then
+                echo "✅ Stack $stack_name is in a complete state"
+              else
+                echo "⚠️  Stack $stack_name status: $STATUS"
+              fi
+            fi
+          done
       
       - name: Deployment summary
         if: always()

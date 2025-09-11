@@ -70,8 +70,8 @@ tf-validate:
 		echo "❌ terraform/ directory not found"; \
 		exit 1; \
 	fi
-	cd terraform && terraform init -backend=false
-	cd terraform && terraform validate
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform init -backend=false
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform validate
 	@echo "✅ Terraform validation completed successfully"
 
 tf-plan:
@@ -80,8 +80,8 @@ tf-plan:
 		echo "❌ terraform/ directory not found"; \
 		exit 1; \
 	fi
-	cd terraform && terraform init
-	cd terraform && terraform plan
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform init
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform plan
 
 tf-apply:
 	@echo "🚀 Applying Terraform changes..."
@@ -89,8 +89,8 @@ tf-apply:
 		echo "❌ terraform/ directory not found"; \
 		exit 1; \
 	fi
-	cd terraform && terraform init
-	cd terraform && terraform apply
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform init
+	@export PATH="$(PWD)/terraform_bin:$$PATH" && cd terraform && terraform apply
 
 # Cleanup
 clean:
