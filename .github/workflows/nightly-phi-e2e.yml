@@ -1,0 +1,447 @@
+name: Nightly PHI E2E Compliance Tests
+
+on:
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Test environment'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+
+env:
+  NODE_VERSION: '20'
+  PLAYWRIGHT_VERSION: '1.40.0'
+
+jobs:
+  phi-e2e-tests:
+    name: PHI Protection E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: e2e_test_password
+          POSTGRES_DB: serenity_e2e
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: |
+          cd apps/web-phase2
+          npx playwright install --with-deps chromium firefox webkit
+
+      - name: Generate Prisma client and setup database
+        run: |
+          pnpm --filter @serenity/database run db:generate
+          pnpm --filter @serenity/database run db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:e2e_test_password@localhost:5432/serenity_e2e
+
+      - name: Seed test data
+        run: pnpm --filter @serenity/database run db:seed
+        env:
+          DATABASE_URL: postgresql://postgres:e2e_test_password@localhost:5432/serenity_e2e
+
+      - name: Start API server
+        run: |
+          cd apps/api
+          npm run build
+          npm run start &
+          # Wait for API to be ready
+          timeout 60s bash -c 'until curl -f http://localhost:3001/health; do sleep 2; done'
+        env:
+          DATABASE_URL: postgresql://postgres:e2e_test_password@localhost:5432/serenity_e2e
+          NODE_ENV: test
+          JWT_SECRET: e2e-test-jwt-secret-for-nightly-only
+          ENCRYPTION_KEY: e2e-test-encryption-key-32-chars!
+          API_PORT: 3001
+
+      - name: Start Web Phase2 server
+        run: |
+          cd apps/web-phase2
+          npm run build
+          npm run start &
+          # Wait for web server to be ready
+          timeout 60s bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_MOCK_AUTH: false
+          NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 1
+          NEXT_PUBLIC_ENABLE_AUDIT_LOGGING: true
+          NODE_ENV: test
+
+      - name: Run PHI Protection E2E Tests
+        run: |
+          cd apps/web-phase2
+          npx playwright test tests/e2e/phi-protection.spec.ts \
+            --reporter=html,json,junit \
+            --output-dir=test-results \
+            --video=on \
+            --screenshot=on \
+            --trace=on
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          API_BASE_URL: http://localhost:3001
+
+      - name: Verify session timeout compliance (15 min requirement)
+        run: |
+          cd apps/web-phase2
+          npx playwright test tests/e2e/phi-protection.spec.ts \
+            --grep "should enforce 15-minute PHI session timeout" \
+            --reporter=json \
+            --output=timeout-test-results.json
+
+      - name: Verify crisis escalation workflow
+        run: |
+          cd apps/web-phase2
+          npx playwright test tests/e2e/phi-protection.spec.ts \
+            --grep "should validate crisis alert escalation" \
+            --reporter=json \
+            --output=crisis-test-results.json
+
+      - name: Verify PHI audit logging
+        run: |
+          cd apps/web-phase2
+          npx playwright test tests/e2e/phi-protection.spec.ts \
+            --grep "should audit all PHI access events" \
+            --reporter=json \
+            --output=audit-test-results.json
+
+      - name: Generate compliance report
+        if: always()
+        run: |
+          cd apps/web-phase2
+          node -e "
+            const fs = require('fs');
+            const report = {
+              timestamp: new Date().toISOString(),
+              runId: '${{ github.run_id }}',
+              branch: '${{ github.ref_name }}',
+              commit: '${{ github.sha }}',
+              environment: '${{ inputs.environment || 'development' }}',
+              tests: {
+                total: 0,
+                passed: 0,
+                failed: 0,
+                skipped: 0
+              },
+              compliance: {
+                sessionTimeout15Min: false,
+                phiAuditLogging: false,
+                crisisEscalation: false,
+                phiMasking: false,
+                accessControl: false
+              },
+              artifacts: {
+                videos: [],
+                screenshots: [],
+                traces: []
+              }
+            };
+            
+            // Parse test results if they exist
+            try {
+              if (fs.existsSync('test-results/results.json')) {
+                const results = JSON.parse(fs.readFileSync('test-results/results.json'));
+                report.tests.total = results.stats?.total || 0;
+                report.tests.passed = results.stats?.passed || 0;
+                report.tests.failed = results.stats?.failed || 0;
+                report.tests.skipped = results.stats?.skipped || 0;
+              }
+              
+              // Check specific compliance tests
+              if (fs.existsSync('timeout-test-results.json')) {
+                const timeoutResults = JSON.parse(fs.readFileSync('timeout-test-results.json'));
+                report.compliance.sessionTimeout15Min = timeoutResults.stats?.failed === 0;
+              }
+              
+              if (fs.existsSync('audit-test-results.json')) {
+                const auditResults = JSON.parse(fs.readFileSync('audit-test-results.json'));
+                report.compliance.phiAuditLogging = auditResults.stats?.failed === 0;
+              }
+              
+              if (fs.existsSync('crisis-test-results.json')) {
+                const crisisResults = JSON.parse(fs.readFileSync('crisis-test-results.json'));
+                report.compliance.crisisEscalation = crisisResults.stats?.failed === 0;
+              }
+              
+              // List artifacts
+              if (fs.existsSync('test-results')) {
+                const files = fs.readdirSync('test-results', { withFileTypes: true });
+                files.forEach(file => {
+                  if (file.name.endsWith('.webm')) report.artifacts.videos.push(file.name);
+                  if (file.name.endsWith('.png')) report.artifacts.screenshots.push(file.name);
+                  if (file.name.endsWith('.zip')) report.artifacts.traces.push(file.name);
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing test results:', e.message);
+            }
+            
+            fs.writeFileSync('phi-compliance-report.json', JSON.stringify(report, null, 2));
+            
+            console.log('=== PHI Compliance Report ===');
+            console.log('Total Tests:', report.tests.total);
+            console.log('Passed:', report.tests.passed);
+            console.log('Failed:', report.tests.failed);
+            console.log('Session Timeout (15min):', report.compliance.sessionTimeout15Min ? '✅ PASS' : '❌ FAIL');
+            console.log('PHI Audit Logging:', report.compliance.phiAuditLogging ? '✅ PASS' : '❌ FAIL');  
+            console.log('Crisis Escalation:', report.compliance.crisisEscalation ? '✅ PASS' : '❌ FAIL');
+            console.log('Artifacts Generated:', report.artifacts.videos.length + report.artifacts.screenshots.length + report.artifacts.traces.length);
+            
+            // Exit with error if critical compliance tests failed
+            if (!report.compliance.sessionTimeout15Min || !report.compliance.phiAuditLogging) {
+              console.error('❌ Critical HIPAA compliance tests failed');
+              process.exit(1);
+            }
+          "
+
+      - name: Upload PHI E2E test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phi-e2e-test-results-${{ github.run_id }}
+          path: |
+            apps/web-phase2/test-results/
+            apps/web-phase2/playwright-report/
+            apps/web-phase2/phi-compliance-report.json
+            apps/web-phase2/timeout-test-results.json
+            apps/web-phase2/audit-test-results.json
+            apps/web-phase2/crisis-test-results.json
+          retention-days: 30
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phi-compliance-report-${{ github.run_id }}
+          path: apps/web-phase2/phi-compliance-report.json
+          retention-days: 90
+
+      - name: Upload Playwright HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-html-report-${{ github.run_id }}
+          path: apps/web-phase2/playwright-report/
+          retention-days: 30
+
+      - name: Post compliance status to PR (if applicable)
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('apps/web-phase2/phi-compliance-report.json')) {
+              const report = JSON.parse(fs.readFileSync('apps/web-phase2/phi-compliance-report.json'));
+              
+              const body = `## 🔒 PHI Compliance Test Results
+              
+              **Run ID:** ${{ github.run_id }}
+              **Timestamp:** ${report.timestamp}
+              
+              ### Test Summary
+              - **Total Tests:** ${report.tests.total}
+              - **Passed:** ${report.tests.passed} ✅
+              - **Failed:** ${report.tests.failed} ${report.tests.failed > 0 ? '❌' : ''}
+              - **Skipped:** ${report.tests.skipped}
+              
+              ### HIPAA Compliance Checks
+              - **15-min Session Timeout:** ${report.compliance.sessionTimeout15Min ? '✅ PASS' : '❌ FAIL'}
+              - **PHI Audit Logging:** ${report.compliance.phiAuditLogging ? '✅ PASS' : '❌ FAIL'}
+              - **Crisis Escalation:** ${report.compliance.crisisEscalation ? '✅ PASS' : '❌ FAIL'}
+              
+              ### Artifacts
+              - Videos: ${report.artifacts.videos.length}
+              - Screenshots: ${report.artifacts.screenshots.length}  
+              - Traces: ${report.artifacts.traces.length}
+              
+              [📊 View Detailed Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Create GitHub issue if compliance fails
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 PHI Compliance Test Failure - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Critical HIPAA Compliance Test Failure
+            
+            **Run ID:** ${{ github.run_id }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Timestamp:** ${new Date().toISOString()}
+            
+            The nightly PHI compliance tests have failed, indicating potential HIPAA violations.
+            
+            ### Required Actions:
+            1. Review failed test results immediately
+            2. Verify 15-minute session timeout implementation
+            3. Check PHI audit logging functionality
+            4. Validate crisis escalation workflows
+            5. Run tests locally to reproduce issues
+            
+            ### Links:
+            - [Failed Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Test Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            **Priority:** High - HIPAA Compliance Issue
+            
+            cc: @your-team @security-team
+            `;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'hipaa-compliance', 'critical', 'phi-protection']
+            });
+
+  compliance-reporting:
+    name: Generate Compliance Dashboard
+    runs-on: ubuntu-latest
+    needs: [phi-e2e-tests]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download compliance report
+        uses: actions/download-artifact@v4
+        with:
+          name: phi-compliance-report-${{ github.run_id }}
+          path: compliance-reports/
+          
+      - name: Generate compliance dashboard
+        run: |
+          mkdir -p compliance-dashboard
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            
+            let report = {};
+            try {
+              report = JSON.parse(fs.readFileSync('compliance-reports/phi-compliance-report.json'));
+            } catch (e) {
+              console.log('No compliance report found, creating empty report');
+              report = {
+                timestamp: new Date().toISOString(),
+                runId: '${{ github.run_id }}',
+                tests: { total: 0, passed: 0, failed: 0 },
+                compliance: {
+                  sessionTimeout15Min: false,
+                  phiAuditLogging: false,
+                  crisisEscalation: false
+                }
+              };
+            }
+            
+            const html = \`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>PHI Compliance Dashboard</title>
+              <meta charset='utf-8'>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; }
+                .header { border-bottom: 2px solid #333; padding-bottom: 20px; }
+                .status-pass { color: #28a745; }
+                .status-fail { color: #dc3545; }
+                .metric { margin: 10px 0; padding: 15px; border-radius: 8px; background: #f8f9fa; }
+                .critical { background: #fff5f5; border-left: 4px solid #dc3545; }
+                .success { background: #f0fff4; border-left: 4px solid #28a745; }
+              </style>
+            </head>
+            <body>
+              <div class='header'>
+                <h1>🔒 PHI Compliance Dashboard</h1>
+                <p>Run ID: \${report.runId} | Generated: \${report.timestamp}</p>
+              </div>
+              
+              <div class='metric'>
+                <h2>Test Results</h2>
+                <p><strong>Total Tests:</strong> \${report.tests.total}</p>
+                <p><strong>Passed:</strong> <span class='status-pass'>\${report.tests.passed}</span></p>
+                <p><strong>Failed:</strong> <span class='status-fail'>\${report.tests.failed}</span></p>
+              </div>
+              
+              <div class='metric \${report.compliance.sessionTimeout15Min ? 'success' : 'critical'}'>
+                <h3>15-Minute Session Timeout</h3>
+                <p>Status: \${report.compliance.sessionTimeout15Min ? '<span class=\"status-pass\">✅ COMPLIANT</span>' : '<span class=\"status-fail\">❌ NON-COMPLIANT</span>'}</p>
+                <p>Requirement: HIPAA mandates automatic logout after 15 minutes of inactivity</p>
+              </div>
+              
+              <div class='metric \${report.compliance.phiAuditLogging ? 'success' : 'critical'}'>
+                <h3>PHI Audit Logging</h3>
+                <p>Status: \${report.compliance.phiAuditLogging ? '<span class=\"status-pass\">✅ COMPLIANT</span>' : '<span class=\"status-fail\">❌ NON-COMPLIANT</span>'}</p>
+                <p>Requirement: All PHI access must be logged for compliance audits</p>
+              </div>
+              
+              <div class='metric \${report.compliance.crisisEscalation ? 'success' : 'critical'}'>
+                <h3>Crisis Escalation</h3>
+                <p>Status: \${report.compliance.crisisEscalation ? '<span class=\"status-pass\">✅ COMPLIANT</span>' : '<span class=\"status-fail\">❌ NON-COMPLIANT</span>'}</p>
+                <p>Requirement: Crisis situations must trigger appropriate emergency protocols</p>
+              </div>
+              
+              <div class='metric'>
+                <h2>Links</h2>
+                <p><a href='https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'>View Full Run Details</a></p>
+                <p><a href='https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts'>Download Test Artifacts</a></p>
+              </div>
+            </body>
+            </html>
+            \`;
+            
+            fs.writeFileSync('compliance-dashboard/index.html', html);
+          "
+          
+      - name: Upload compliance dashboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: phi-compliance-dashboard-${{ github.run_id }}
+          path: compliance-dashboard/
+          retention-days: 90

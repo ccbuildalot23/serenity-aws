@@ -1,3 +1,4 @@
+/** @jest-environment jsdom */
 /**
  * BillingDashboard Component Tests
  * Tests for billing dashboard with charge management and analytics

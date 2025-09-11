@@ -6,10 +6,14 @@
     "build": "tsc",
     "deploy": "cdk deploy --all",
     "deploy:dev": "cdk deploy --all --context env=dev",
+    "deploy:pilot": "cdk deploy --all --context env=pilot --require-approval never",
     "deploy:prod": "cdk deploy --all --context env=prod --require-approval never",
     "diff": "cdk diff",
+    "diff:pilot": "cdk diff --context env=pilot",
     "synth": "cdk synth",
-    "destroy": "cdk destroy --all"
+    "synth:pilot": "cdk synth --context env=pilot",
+    "destroy": "cdk destroy --all",
+    "destroy:pilot": "cdk destroy --all --context env=pilot"
   },
   "devDependencies": {
     "@types/node": "20.10.5",

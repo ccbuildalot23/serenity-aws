@@ -9,6 +9,7 @@
     "test": "jest --coverage",
     "test:unit": "jest --coverage",
     "test:integration": "jest --testPathPattern=integration --coverage",
+    "test:cov": "jest --coverage --coverageReporters=json --coverageReporters=lcov",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"

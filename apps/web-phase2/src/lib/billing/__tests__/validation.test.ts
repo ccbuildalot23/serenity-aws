@@ -1,3 +1,4 @@
+/** @jest-environment node */
 /**
  * Billing Validation Service Tests
  * Tests for Zod schemas and validation functions

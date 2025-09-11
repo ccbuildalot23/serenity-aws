@@ -12,7 +12,14 @@
       "Bash(git merge:*)",
       "Bash(npm run lint)",
       "Bash(npm run typecheck:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test)",
+      "Read(//c/**)",
+      "Bash(docker:*)",
+      "Bash(choco install:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(terraform:*)"
     ],
     "deny": [],
     "ask": []

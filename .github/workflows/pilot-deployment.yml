@@ -1,0 +1,481 @@
+# Pilot Deployment Pipeline with Production Safety Checks
+# Comprehensive deployment workflow for pilot environment with HIPAA compliance guardrails
+
+name: Pilot Deployment
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'pilot'
+        type: choice
+        options:
+          - pilot
+          - production
+      skip_tests:
+        description: 'Skip test suite (emergency only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+  AWS_REGION: 'us-east-1'
+  DEPLOYMENT_ENV: ${{ github.event.inputs.environment || 'pilot' }}
+
+jobs:
+  # Security and compliance pre-checks
+  security-scan:
+    name: Security & Compliance Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: |
+          echo "🔐 Running comprehensive security audit..."
+          npm audit --audit-level high --production
+          
+          # Check for secrets in code
+          echo "🔍 Scanning for potential secrets..."
+          if grep -r "password\|secret\|key" --include="*.ts" --include="*.js" apps/ | grep -v "__tests__" | grep -v "// Safe:" ; then
+            echo "❌ Potential secrets found in code"
+            exit 1
+          fi
+          
+          echo "✅ Security audit passed"
+
+      - name: HIPAA compliance check
+        run: |
+          echo "🏥 Verifying HIPAA compliance requirements..."
+          
+          # Check PHI timeout enforcement
+          if ! grep -r "15.*minute" --include="*.ts" apps/api/src/ ; then
+            echo "❌ PHI timeout not properly configured"
+            exit 1
+          fi
+          
+          # Check encryption configuration
+          if ! grep -r "encryption" --include="*.ts" infrastructure/ ; then
+            echo "❌ Encryption not properly configured"
+            exit 1
+          fi
+          
+          # Check audit logging
+          if ! grep -r "audit.*log" --include="*.ts" apps/api/src/ ; then
+            echo "❌ Audit logging not properly configured"
+            exit 1
+          fi
+          
+          echo "✅ HIPAA compliance verified"
+
+  # Enhanced test suite with coverage gates
+  test-suite:
+    name: Enhanced Test Suite
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.inputs.skip_tests }}
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: serenity_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests with coverage gate
+        run: |
+          cd apps/api
+          npm ci
+          npm run test:cov
+          
+          # Parse coverage and enforce 75% gate
+          COVERAGE=$(node -e "console.log(JSON.parse(require('fs').readFileSync('coverage/coverage-final.json')).total.statements.pct)")
+          echo "API Coverage: $COVERAGE%"
+          
+          if (( $(echo "$COVERAGE < 75" | bc -l) )); then
+            echo "❌ API coverage $COVERAGE% below 75% threshold"
+            exit 1
+          fi
+          
+          echo "✅ API coverage gate passed: $COVERAGE%"
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
+          JWT_SECRET: test-secret-key-for-testing-only
+
+      - name: Run web-phase2 tests
+        run: |
+          cd apps/web-phase2
+          npm ci
+          npm run test:unit
+          
+          echo "✅ Web-phase2 tests passed"
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_AWS_REGION: us-east-1
+          NEXT_PUBLIC_MOCK_AUTH: true
+          NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
+          NEXT_PUBLIC_ENABLE_AUDIT_LOGGING: true
+          NODE_ENV: test
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            apps/api/coverage/
+            apps/web-phase2/coverage/
+          retention-days: 30
+
+  # Infrastructure validation
+  infrastructure-validation:
+    name: Infrastructure Validation
+    runs-on: ubuntu-latest
+    needs: [security-scan]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install CDK dependencies
+        run: |
+          cd infrastructure
+          npm ci
+          npm install -g aws-cdk
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK diff and validation
+        run: |
+          cd infrastructure
+          echo "🏗️ Validating infrastructure changes..."
+          
+          # Synthesize templates
+          npm run synth:pilot
+          
+          # Check for breaking changes
+          if npm run diff:pilot | grep -E "([-].*|AWS::.*::.*.*Delete)"; then
+            echo "⚠️ Potential breaking infrastructure changes detected"
+            echo "Manual review required before deployment"
+          fi
+          
+          echo "✅ Infrastructure validation completed"
+
+  # Build and package applications
+  build-applications:
+    name: Build Applications
+    runs-on: ubuntu-latest
+    needs: [test-suite, infrastructure-validation]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build API application
+        run: |
+          cd apps/api
+          npm ci
+          npm run build
+          
+          # Create deployment package
+          mkdir -p deployment
+          cp -r dist deployment/
+          cp package.json deployment/
+          cp package-lock.json deployment/
+          
+          echo "✅ API build completed"
+
+      - name: Build web-phase2 application
+        run: |
+          cd apps/web-phase2
+          npm ci
+          npm run build
+          
+          echo "✅ Web-phase2 build completed"
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.PILOT_API_URL }}
+          NEXT_PUBLIC_AWS_REGION: us-east-1
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.PILOT_COGNITO_USER_POOL_ID }}
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.PILOT_COGNITO_CLIENT_ID }}
+          NEXT_PUBLIC_MOCK_AUTH: false
+          NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
+          NEXT_PUBLIC_ENABLE_AUDIT_LOGGING: true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-builds
+          path: |
+            apps/api/deployment/
+            apps/web-phase2/.next/
+          retention-days: 7
+
+  # Deploy infrastructure
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [build-applications]
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: ${{ github.event.inputs.environment || 'pilot' }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install CDK dependencies
+        run: |
+          cd infrastructure
+          npm ci
+          npm install -g aws-cdk
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy infrastructure
+        run: |
+          cd infrastructure
+          echo "🚀 Deploying infrastructure to ${{ env.DEPLOYMENT_ENV }}..."
+          
+          # Deploy with environment context
+          npm run deploy:pilot
+          
+          # Capture outputs
+          aws cloudformation describe-stacks \
+            --stack-name SerenityPilot-pilot \
+            --query 'Stacks[0].Outputs' \
+            --output json > stack-outputs.json
+          
+          echo "✅ Infrastructure deployment completed"
+
+      - name: Upload infrastructure outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-outputs
+          path: infrastructure/stack-outputs.json
+          retention-days: 30
+
+  # Deploy applications
+  deploy-applications:
+    name: Deploy Applications
+    runs-on: ubuntu-latest
+    needs: [deploy-infrastructure]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: application-builds
+
+      - name: Download infrastructure outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: infrastructure-outputs
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy API to ECS
+        run: |
+          echo "🚀 Deploying API application..."
+          
+          # Parse infrastructure outputs
+          API_CLUSTER=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="ApiCluster") | .OutputValue')
+          API_SERVICE=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="ApiService") | .OutputValue')
+          
+          # Force new deployment
+          aws ecs update-service \
+            --cluster $API_CLUSTER \
+            --service $API_SERVICE \
+            --force-new-deployment
+          
+          echo "✅ API deployment initiated"
+
+      - name: Deploy web to S3/CloudFront
+        run: |
+          echo "🚀 Deploying web application..."
+          
+          # Parse infrastructure outputs
+          WEB_BUCKET=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="WebBucket") | .OutputValue')
+          CLOUDFRONT_ID=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="CloudFrontDistribution") | .OutputValue')
+          
+          # Sync to S3
+          aws s3 sync .next/ s3://$WEB_BUCKET/ --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "*.json"
+          
+          # Upload HTML with no-cache
+          aws s3 sync .next/ s3://$WEB_BUCKET/ \
+            --include "*.html" \
+            --include "*.json" \
+            --cache-control "no-cache, no-store, must-revalidate"
+          
+          # Invalidate CloudFront
+          aws cloudfront create-invalidation \
+            --distribution-id $CLOUDFRONT_ID \
+            --paths "/*"
+          
+          echo "✅ Web deployment completed"
+
+  # Post-deployment validation
+  post-deployment-validation:
+    name: Post-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: [deploy-applications]
+    timeout-minutes: 15
+    steps:
+      - name: Download infrastructure outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: infrastructure-outputs
+
+      - name: Health checks
+        run: |
+          echo "🔍 Running post-deployment health checks..."
+          
+          # Parse outputs
+          API_URL=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="ApiUrl") | .OutputValue')
+          WEB_URL=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="CloudFrontUrl") | .OutputValue')
+          
+          # API health check
+          echo "Checking API health: $API_URL/health"
+          if curl -f -s "$API_URL/health" | grep -q "ok"; then
+            echo "✅ API health check passed"
+          else
+            echo "❌ API health check failed"
+            exit 1
+          fi
+          
+          # Web health check
+          echo "Checking web application: $WEB_URL"
+          if curl -f -s -o /dev/null "$WEB_URL"; then
+            echo "✅ Web health check passed"
+          else
+            echo "❌ Web health check failed"
+            exit 1
+          fi
+
+      - name: HIPAA compliance validation
+        run: |
+          echo "🏥 Validating HIPAA compliance in deployed environment..."
+          
+          # Check HTTPS enforcement
+          API_URL=$(cat stack-outputs.json | jq -r '.[] | select(.OutputKey=="ApiUrl") | .OutputValue')
+          if [[ $API_URL == https://* ]]; then
+            echo "✅ HTTPS enforcement verified"
+          else
+            echo "❌ HTTPS not properly enforced"
+            exit 1
+          fi
+          
+          # Check security headers
+          if curl -I -s "$API_URL/health" | grep -q "Strict-Transport-Security"; then
+            echo "✅ Security headers verified"
+          else
+            echo "❌ Security headers missing"
+            exit 1
+          fi
+
+  # Notification and monitoring setup
+  deployment-notification:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [post-deployment-validation]
+    if: always()
+    steps:
+      - name: Send deployment notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Pilot deployment ${{ job.status }}!
+            Environment: ${{ env.DEPLOYMENT_ENV }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()
+
+      - name: Update deployment status
+        run: |
+          echo "📊 Deployment Summary:"
+          echo "Environment: ${{ env.DEPLOYMENT_ENV }}"
+          echo "Status: ${{ job.status }}"
+          echo "Timestamp: $(date -u)"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref }}"

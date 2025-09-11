@@ -1,0 +1,44 @@
+# Serenity AWS - Pilot Environment Configuration
+# Copy this to terraform.tfvars and customize for your deployment
+
+# Core Configuration
+aws_region   = "us-east-1"
+environment  = "pilot"
+project_name = "serenity"
+
+# Networking
+vpc_cidr           = "10.0.0.0/16"
+alb_allowed_cidrs  = ["0.0.0.0/0"]  # Restrict in production
+
+# Application Settings
+api_port                    = 3001
+phi_session_timeout_minutes = 15  # HIPAA requirement
+
+# ECS Fargate Configuration
+api_cpu           = 512
+api_memory        = 1024
+api_desired_count = 2
+api_max_capacity  = 10
+
+# Domain Configuration (optional for pilot)
+domain_name         = ""  # e.g., "serenityhealth.com"
+ssl_certificate_arn = ""  # ACM certificate ARN if using custom domain
+
+# Monitoring & Alerting
+alert_email = "alerts@serenityhealth.io"
+
+# Feature Flags
+enable_backup      = true
+enable_monitoring  = true
+enable_waf         = true
+enable_cloudtrail  = true
+
+# HIPAA Compliance Settings
+require_mfa                    = true
+enable_encryption_at_rest      = true  
+enable_encryption_in_transit   = true
+audit_log_retention_days       = 2555  # ~7 years
+
+# Cost Control
+enable_cost_optimization       = true
+reserved_capacity_percentage   = 50

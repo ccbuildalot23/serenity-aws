@@ -1,8 +1,8 @@
 import { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminAddUserToGroupCommand, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import * as jwksRsa from 'jwks-rsa';
 import { promisify } from 'util';
+import { cognitoConfig, jwksClientInstance, jwtIssuer, developmentMockConfig, cognitoClient } from '../config/cognito';
 
 // Types
 export interface AuthUser {
@@ -31,27 +31,34 @@ declare global {
   }
 }
 
-// AWS Cognito client
-const cognitoClient = new CognitoIdentityProviderClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-});
-
-// JWKS client for token verification
-const jwksClient = jwksRsa.default || jwksRsa;
-const jwksClientInstance = jwksClient({
-  jwksUri: `https://cognito-idp.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
-  cache: true,
-  rateLimit: true,
-  jwksRequestsPerMinute: 10,
-});
-
-const getSigningKey = promisify(jwksClientInstance.getSigningKey.bind(jwksClientInstance));
+// JWKS signing key helper (only for production)
+const getSigningKey = jwksClientInstance 
+  ? promisify(jwksClientInstance.getSigningKey.bind(jwksClientInstance))
+  : null;
 
 export class AuthService {
   /**
-   * Verify JWT token from Cognito
+   * Verify JWT token from Cognito (production) or mock (development)
    */
   static async verifyToken(token: string): Promise<TokenPayload> {
+    // Development mode: return mock payload
+    if (cognitoConfig.isDevelopment) {
+      return {
+        sub: 'dev-user-123',
+        email: 'dev@serenity.dev',
+        'cognito:groups': ['Patients'],
+        'custom:tenantId': 'dev-tenant',
+        'custom:role': 'PATIENT',
+        iat: Math.floor(Date.now() / 1000) - 60,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+    }
+
+    // Production mode: verify with JWKS
+    if (!getSigningKey) {
+      throw new Error('JWKS client not configured for production');
+    }
+
     // Decode token header to get key ID
     const decoded = jwt.decode(token, { complete: true });
     if (!decoded || typeof decoded === 'string') {
@@ -68,7 +75,8 @@ export class AuthService {
     // Verify token
     const payload = jwt.verify(token, signingKey, {
       algorithms: ['RS256'],
-      issuer: `https://cognito-idp.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
+      issuer: jwtIssuer,
+      audience: cognitoConfig.clientId,
     }) as TokenPayload;
 
     return payload;
@@ -214,3 +222,6 @@ export class AuthService {
     };
   };
 }
+
+// Export singleton instance for testing and usage
+export const authService = new AuthService();

@@ -1,0 +1,30 @@
+# Terraform generated files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!terraform.tfvars.example
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# Plan files
+*.plan
+pilot.plan
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Environment files
+.env*
+!.env.example
