@@ -254,13 +254,10 @@ jobs:
       - name: Install dependencies
         run: pnpm i -w
         
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-        
       - name: Run web-phase2 auth route tests
         run: |
           cd apps/web-phase2
-          npm test src/app/api/auth/me/__tests__/route.test.ts src/app/api/auth/verify-session/__tests__/route.test.ts
+          pnpm test src/app/api/auth/me/__tests__/route.test.ts src/app/api/auth/verify-session/__tests__/route.test.ts
         env:
           NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
           NEXT_PUBLIC_MOCK_AUTH: true
@@ -271,7 +268,7 @@ jobs:
         if: always()
         with:
           name: web-auth-test-results
-          path: apps/web-phase2/test-results/
+          path: apps/web-phase2/coverage/
 
   api-tests-coverage:
     name: API Tests Coverage
@@ -418,8 +415,9 @@ jobs:
       - name: Regenerate consent docs
         run: |
           # Get latest nightly run
-          NIGHTLY_RUN_URL=$(gh run list --workflow=nightly-compliance.yml --limit=1 --json url --jq '.[0].url')
+          NIGHTLY_RUN_URL=$(gh run list --workflow=nightly-compliance.yml --limit=1 --json url --jq '.[0].url' || echo "")
           
+          # Use dynamic coverage from previous step
           node scripts/generate-consent-docs.mjs \
             --ciRunUrl=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} \
             --nightlyRunUrl=$NIGHTLY_RUN_URL \

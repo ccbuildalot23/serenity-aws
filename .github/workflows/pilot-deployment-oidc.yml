@@ -39,6 +39,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
       
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -71,8 +76,9 @@ jobs:
       - name: Install CDK & dependencies
         run: |
           npm i -g aws-cdk
+          pnpm i -w
           cd infrastructure
-          npm ci
+          pnpm install
       
       - name: CDK bootstrap (if needed)
         run: |
@@ -104,10 +110,29 @@ jobs:
         working-directory: infrastructure
         run: |
           echo "📊 Capturing stack outputs..."
-          aws cloudformation describe-stacks \
-            --stack-name SerenityPilot-${{ github.event.inputs.environment }} \
-            --query 'Stacks[0].Outputs' \
-            --output json > stack-outputs.json || echo "No stack outputs available"
+          # Try multiple possible stack name patterns
+          STACK_NAMES=(
+            "SerenityPilotStack"
+            "SerenityPilot-${{ github.event.inputs.environment }}"
+            "serenity-pilot-stack"
+            "SerenityStack-${{ github.event.inputs.environment }}"
+          )
+          
+          for stack_name in "${STACK_NAMES[@]}"; do
+            echo "Trying stack: $stack_name"
+            if aws cloudformation describe-stacks --stack-name "$stack_name" > /dev/null 2>&1; then
+              echo "Found stack: $stack_name"
+              aws cloudformation describe-stacks \
+                --stack-name "$stack_name" \
+                --query 'Stacks[0].Outputs' \
+                --output json > stack-outputs.json
+              break
+            fi
+          done
+          
+          if [ ! -f stack-outputs.json ]; then
+            echo "{\"message\": \"No stack outputs found\"}" > stack-outputs.json
+          fi
       
       - name: Upload deployment artifacts
         uses: actions/upload-artifact@v4

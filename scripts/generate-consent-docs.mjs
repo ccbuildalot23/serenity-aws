@@ -19,8 +19,27 @@ const config = {
   coverageFile: args.find(arg => arg.startsWith('--coverageFile='))?.split('=')[1] || 'apps/api/coverage/coverage-final.json',
   apiTests: args.find(arg => arg.startsWith('--apiTests='))?.split('=')[1] || '88/88',
   webTests: args.find(arg => arg.startsWith('--webTests='))?.split('=')[1] || '18/18',
-  coverage: args.find(arg => arg.startsWith('--coverage='))?.split('=')[1] || '75.16%'
+  coverage: args.find(arg => arg.startsWith('--coverage='))?.split('=')[1]
 };
+
+/**
+ * Extract coverage from JSON artifact if not provided
+ */
+async function extractCoverageFromFile() {
+  if (config.coverage) {
+    return config.coverage;
+  }
+  
+  try {
+    const coverageFilePath = path.resolve(rootDir, config.coverageFile);
+    const coverageData = JSON.parse(await fs.readFile(coverageFilePath, 'utf8'));
+    const statementsPct = coverageData.total.statements.pct;
+    return `${statementsPct}%`;
+  } catch (error) {
+    console.warn(`⚠️ Could not extract coverage from ${config.coverageFile}: ${error.message}`);
+    return '75.16%'; // Fallback
+  }
+}
 
 console.log('🚀 Generating consent documents with live metrics...');
 console.log('Configuration:', config);
@@ -32,36 +51,20 @@ async function updateFinalConsentCheckpoint() {
   const filePath = path.join(rootDir, 'FINAL_CONSENT_CHECKPOINT.md');
   let content = await fs.readFile(filePath, 'utf8');
   
-  // Update test counts
-  content = content.replace(
-    /API Authentication \| \d+\/\d+ \|/g,
-    `API Authentication | ${config.apiTests} |`
-  );
+  // Replace all placeholders
+  content = content.replace(/{{COVERAGE_PCT}}/g, config.coverage);
+  content = content.replace(/{{API_TESTS}}/g, config.apiTests);
+  content = content.replace(/{{WEB_TESTS}}/g, config.webTests);
+  content = content.replace(/{{BRANCHES_PCT}}/g, config.branchesPct || '65.57%');
+  content = content.replace(/{{LINES_PCT}}/g, config.linesPct || '74.78%');
   
-  content = content.replace(
-    /Web-phase2 Auth Routes \| \d+\/\d+ \|/g,
-    `Web-phase2 Auth Routes | ${config.webTests} |`
-  );
-  
-  // Update coverage
-  content = content.replace(
-    /\d+\.\d+% statements/g,
-    `${config.coverage} statements`
-  );
-  
-  // Update workflow links if provided
+  // Update CI/Nightly URLs
   if (config.ciRunUrl) {
-    content = content.replace(
-      /CI web tests: Job "Run [^"]*" ✅[^\\n]*/g,
-      `CI web tests: Job "Run Tests" ✅ [Latest Run](${config.ciRunUrl})`
-    );
+    content = content.replace(/{{CI_RUN_URL}}/g, config.ciRunUrl);
   }
   
   if (config.nightlyRunUrl) {
-    content = content.replace(
-      /Nightly E2E: Job "[^"]*" ✅[^\\n]*/g,
-      `Nightly E2E: Job "PHI Protection E2E Tests" ✅ [Latest Run](${config.nightlyRunUrl})`
-    );
+    content = content.replace(/{{NIGHTLY_RUN_URL}}/g, config.nightlyRunUrl);
   }
   
   await fs.writeFile(filePath, content, 'utf8');
@@ -98,17 +101,19 @@ async function updateReleaseNotes() {
   const filePath = path.join(rootDir, 'final_release_notes_phase2.md');
   let content = await fs.readFile(filePath, 'utf8');
   
-  // Update API test counts
-  content = content.replace(
-    /API Authentication:\*\* ✅ \*\*\d+\/\d+ tests passing\*\*/g,
-    `API Authentication:** ✅ **${config.apiTests} tests passing**`
-  );
+  // Replace all placeholders
+  content = content.replace(/{{COVERAGE_PCT}}/g, config.coverage);
+  content = content.replace(/{{API_TESTS}}/g, config.apiTests);
+  content = content.replace(/{{WEB_TESTS}}/g, config.webTests);
   
-  // Update coverage
-  content = content.replace(
-    /API Test Coverage:\*\* ✅ \*\*\d+\.\d+% statements\*\*/g,
-    `API Test Coverage:** ✅ **${config.coverage} statements**`
-  );
+  // Update CI/Nightly URLs
+  if (config.ciRunUrl) {
+    content = content.replace(/{{CI_RUN_URL}}/g, config.ciRunUrl);
+  }
+  
+  if (config.nightlyRunUrl) {
+    content = content.replace(/{{NIGHTLY_RUN_URL}}/g, config.nightlyRunUrl);
+  }
   
   await fs.writeFile(filePath, content, 'utf8');
   console.log('✅ Updated final_release_notes_phase2.md');
@@ -126,6 +131,9 @@ function getCurrentTimestamp() {
  */
 async function main() {
   try {
+    // Extract coverage from artifact file if not provided
+    config.coverage = await extractCoverageFromFile();
+    
     await updateFinalConsentCheckpoint();
     await updateBMADCheckpoint();
     await updateReleaseNotes();

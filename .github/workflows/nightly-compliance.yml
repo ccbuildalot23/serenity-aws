@@ -27,12 +27,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
       
       - name: Install dependencies
         run: |
-          npm ci
-          npm run build --if-present
+          pnpm i -w
+          pnpm run build --if-present
       
       # Advanced CodeQL analysis with all queries
       - name: Advanced CodeQL Analysis
@@ -85,10 +89,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
       
       - name: Install dependencies
-        run: npm ci
+        run: pnpm i -w
       
       - name: HIPAA Technical Safeguards Audit
         run: |
@@ -155,13 +163,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
       
       - name: Install dependencies
-        run: npm ci
+        run: pnpm i -w
       
       - name: Build applications
-        run: npm run build
+        run: pnpm run build
       
       - name: Performance benchmarks
         run: |
@@ -236,6 +248,20 @@ jobs:
     name: PHI Protection E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: serenity_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     
     steps:
       - name: Checkout code
@@ -245,10 +271,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
       
       - name: Install dependencies
-        run: npm ci
+        run: pnpm i -w
+      
+      - name: Setup test database
+        run: |
+          cd packages/database
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
       
       - name: Install Playwright browsers
         run: |
@@ -257,25 +294,25 @@ jobs:
       
       - name: Build applications
         run: |
-          npm run build
+          pnpm run build
           cd apps/web-phase2
-          npm run build
+          pnpm run build
       
       - name: Start API server
         run: |
           cd apps/api
-          npm run start &
+          pnpm run dev &
           echo $! > api.pid
           sleep 10  # Wait for server to start
         env:
           NODE_ENV: test
-          DATABASE_URL: sqlite://test.db
+          DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
           JWT_SECRET: test-secret-for-e2e
       
       - name: Start web-phase2 server
         run: |
           cd apps/web-phase2
-          npm run start &
+          pnpm run dev &
           echo $! > web.pid
           sleep 15  # Wait for Next.js to start
         env:

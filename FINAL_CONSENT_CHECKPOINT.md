@@ -12,7 +12,7 @@ All BMAD framework objectives completed successfully:
 - **Business:** ✅ Artifact-backed proof of HIPAA rails (15-min PHI timeout, auth mapping)
 - **Moat:** ✅ Nightly PHI E2E + reliable unit tests infrastructure established
 - **Assumptions:** ✅ Auth logic verified in both API & web routes, CI runs all tests
-- **Deltas:** ✅ Auth tests stabilized, API coverage at 75.28%, CI/nightly verified
+- **Deltas:** ✅ Auth tests stabilized, API coverage at {{COVERAGE_PCT}}, CI/nightly verified
 
 ## 🎯 Target Achievement Summary
 
@@ -48,7 +48,7 @@ npm run test:cov
 API Coverage Summary:
 - Statements: {{COVERAGE_PCT}}% (≥75% ✓)
 - Branches: {{BRANCH_COVERAGE}}%
-- Lines: 74.78%
+- Lines: {{LINES_PCT}}
 - Functions: ~80%
 
 Tests: 88/88 passed (100% success rate)
@@ -98,7 +98,7 @@ Test Suites: 4/4 passed
 ### Test Suite Status
 | Component | Tests | Status | Coverage |
 |-----------|-------|--------|----------|
-| API Authentication | 88/88 | ✅ 100% PASS | 75.16% statements |
+| API Authentication | {{API_TESTS}} | ✅ 100% PASS | {{COVERAGE_PCT}} statements |
 | Web-phase2 Auth Routes | 18/18 | ✅ 100% PASS | Route-level verified |
 | CI Pipeline | Verified | ✅ Configured | Job "Run web-phase2 compliance tests" |
 | Nightly E2E | Verified | ✅ Configured | Job "PHI Protection E2E Tests" |
@@ -106,9 +106,9 @@ Test Suites: 4/4 passed
 ### Coverage Achievement
 ```
 API Test Coverage (Target: ≥75%)
-✅ Statements: 75.16% (+0.16% above target)
-• Branches: 65.57% 
-• Lines: 74.78%
+✅ Statements: {{COVERAGE_PCT}} (above target)
+• Branches: {{BRANCHES_PCT}} 
+• Lines: {{LINES_PCT}}
 • Functions: ~80%
 
 Result: TARGET ACHIEVED without micro-tests
@@ -138,7 +138,7 @@ apps/web-phase2/src/app/api/auth/verify-session/__tests__/route.test.ts
 - Dev mode configuration for consistent testing
 
 final_release_notes_phase2.md
-- Updated with real metrics (87/87 tests, 75.28% coverage)
+- Updated with real metrics ({{API_TESTS}} tests, {{COVERAGE_PCT}} coverage)
 - Verified CI/nightly line references
 - Corrected achievement status
 ```
@@ -154,7 +154,7 @@ final_release_notes_phase2.md
 ```bash
 # All commands working:
 cd apps/web-phase2 && npm test  # 18/18 auth tests pass
-cd apps/api && npm run test:cov # 88/88 tests pass, 75.16% coverage
+cd apps/api && npm run test:cov # {{API_TESTS}} tests pass, {{COVERAGE_PCT}} coverage
 cd apps/api && npm run dev      # Server starts successfully
 cd apps/web-phase2 && npm run dev # Frontend starts successfully
 ```
@@ -175,7 +175,7 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 ## 🎯 Acceptance Criteria - ALL MET
 
 - ✅ **web-phase2 auth tests:** 18/18 pass
-- ✅ **API coverage ≥75%:** 75.28% achieved  
+- ✅ **API coverage ≥75%:** {{COVERAGE_PCT}} achieved  
 - ✅ **CI job "Run web-phase2 compliance tests":** Verified test execution with HIPAA env vars
 - ✅ **Nightly job "PHI Protection E2E Tests":** Verified Playwright PHI E2E job
 - ✅ **Release notes:** Real metrics and artifact links updated
@@ -199,7 +199,7 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 
 ### Deltas Achieved ✅
 - **Stabilized auth tests:** 18/18 passing with proper test environment
-- **API coverage lifted:** 75.28% statements (target exceeded)
+- **API coverage lifted:** {{COVERAGE_PCT}} statements (target exceeded)
 - **CI/nightly verified:** Both workflow configurations confirmed
 - **Real metrics:** Release notes updated with actual test results
 
@@ -218,11 +218,11 @@ cd apps/web-phase2 && npm run dev # Frontend starts successfully
 **Test Count Verification:**
 - Web-phase2 auth: 18/18 tests ✅
 - API tests: 88/88 tests ✅ 
-- Coverage: 75.16% statements ✅
+- Coverage: {{COVERAGE_PCT}} statements ✅
 
 **Workflow Verification:**
-- CI Job "Run web-phase2 compliance tests": ✅ [Run 17630457297](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17630457297)
-- Nightly Job "PHI Protection E2E Tests": ✅ [Run 17601323821](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17601323821)
+- CI Job "Regenerate Documentation": ✅ [Latest CI Run]({{CI_RUN_URL}})
+- Nightly Job "PHI Protection E2E Tests": ✅ [Latest Nightly Run]({{NIGHTLY_RUN_URL}})
 
 ---
 
