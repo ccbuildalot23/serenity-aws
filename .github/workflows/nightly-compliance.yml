@@ -29,9 +29,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
-          version: 10
+          version: 9
       
       - name: Install dependencies
         run: |
@@ -91,9 +91,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
-          version: 10
+          version: 9
       
       - name: Install dependencies
         run: pnpm i -w
@@ -165,9 +165,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
-          version: 10
+          version: 9
       
       - name: Install dependencies
         run: pnpm i -w
@@ -267,17 +267,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-          run_install: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       
       - name: Setup test database
         run: |
