@@ -1,47 +1,130 @@
-name: Pilot Deploy
+name: Pilot Deploy OIDC
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target env"
+        description: "Target environment"
         required: true
         default: "pilot"
+        type: choice
+        options:
+          - pilot
+          - dev
+      confirm_cleanup:
+        description: "Confirm pre-deployment cleanup"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
   contents: read
 
-concurrency:
-  group: pilot-deploy
-  cancel-in-progress: false
+env:
+  NODE_VERSION: '20'
+  AWS_REGION: 'us-east-1'
 
 jobs:
   deploy:
     name: CDK Deploy (${{ github.event.inputs.environment }})
     runs-on: ubuntu-latest
     environment: pilot
+    timeout-minutes: 45
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
+          node-version: ${{ env.NODE_VERSION }}
+      
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN_PILOT }}
-          aws-region: us-east-1
-
-      - name: Install CDK & deps
-        run: npm i -g aws-cdk && npm ci
-
-      - name: CDK diff (sanity)
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Pre-deployment cleanup
+        if: github.event.inputs.confirm_cleanup == 'true'
+        run: |
+          echo "🧹 Running pre-deployment cleanup..."
+          
+          # Delete backup vault if exists
+          echo "Deleting serenity-pilot-backup-vault..."
+          aws backup delete-backup-vault --backup-vault-name serenity-pilot-backup-vault || true
+          
+          # Delete any ROLLBACK_COMPLETE stacks
+          echo "Checking for failed stacks..."
+          ROLLBACK_STACKS=$(aws cloudformation describe-stacks --query 'Stacks[?contains(StackName, `pilot`) && StackStatus == `ROLLBACK_COMPLETE`].StackName' --output text)
+          if [ -n "$ROLLBACK_STACKS" ]; then
+            for stack in $ROLLBACK_STACKS; do
+              echo "Deleting rollback stack: $stack"
+              aws cloudformation delete-stack --stack-name $stack
+              aws cloudformation wait stack-delete-complete --stack-name $stack
+            done
+          fi
+          
+          echo "✅ Pre-deployment cleanup completed"
+      
+      - name: Install CDK & dependencies
+        run: |
+          npm i -g aws-cdk
+          cd infrastructure
+          npm ci
+      
+      - name: CDK bootstrap (if needed)
+        run: |
+          cd infrastructure  
+          cdk bootstrap || echo "Bootstrap already exists or failed"
+      
+      - name: CDK diff (sanity check)
         working-directory: infrastructure
-        run: npx cdk diff --all --concurrency 4 || true
-
-      - name: CDK deploy (no prompts)
+        run: |
+          echo "🔍 Running CDK diff for sanity check..."
+          npx cdk diff --all --concurrency 4 || true
+      
+      - name: Deploy infrastructure
         working-directory: infrastructure
-        run: npx cdk deploy --all --require-approval never --concurrency 4
+        run: |
+          echo "🚀 Deploying infrastructure to ${{ github.event.inputs.environment }}..."
+          npx cdk deploy --all --require-approval never --concurrency 4 2>&1 | tee pilot-deploy.log
+          
+          # Capture deployment status
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "✅ Infrastructure deployment completed successfully"
+          else
+            echo "❌ Infrastructure deployment failed"
+            exit 1
+          fi
+      
+      - name: Capture stack outputs
+        if: success()
+        working-directory: infrastructure
+        run: |
+          echo "📊 Capturing stack outputs..."
+          aws cloudformation describe-stacks \
+            --stack-name SerenityPilot-${{ github.event.inputs.environment }} \
+            --query 'Stacks[0].Outputs' \
+            --output json > stack-outputs.json || echo "No stack outputs available"
+      
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pilot-deploy-artifacts
+          path: |
+            infrastructure/pilot-deploy.log
+            infrastructure/stack-outputs.json
+          retention-days: 30
+      
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "📋 Deployment Summary:"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Status: ${{ job.status }}"
+          echo "Timestamp: $(date -u)"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"

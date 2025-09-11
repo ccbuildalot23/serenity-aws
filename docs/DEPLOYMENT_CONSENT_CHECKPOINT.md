@@ -102,6 +102,9 @@ gh workflow run pilot-deployment.yml --field environment=pilot
 # Monitor deployment progress
 gh run list --workflow=pilot-deployment.yml
 
+# Latest CI Status: https://github.com/ccbuildalot23/serenity-aws/actions/runs/17650217539
+# Latest Nightly Status: https://github.com/ccbuildalot23/serenity-aws/actions/runs/17632265014
+
 # Production monitoring (manual trigger)
 gh workflow run production-monitoring.yml --field environment=pilot
 ```
@@ -149,6 +152,20 @@ aws logs describe-log-groups --log-group-name-prefix /aws/ecs/serenity-pilot
 ---
 
 ## 📊 Operational Readiness
+
+### CI/CD Pipeline Status
+**Latest CI Run:** [#17650217539](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17650217539)
+- Run Tests: ❌ Failed (API tests)
+- Terraform Validation: ✅ Passed
+- Security Scan: ✅ Passed
+- Lint Code: ❌ Failed (TypeScript check)
+- Web-phase2 Compliance Tests: ⏭️ Skipped
+
+**Latest Nightly Run:** [#17632265014](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17632265014)
+- HIPAA Compliance Audit: ❌ Failed (Node.js setup)
+- PHI Protection E2E Tests: ❌ Failed (Node.js setup)
+- Git Repository Health Check: ✅ Passed
+- Compliance Report: ✅ Generated
 
 ### Monitoring Dashboards Configured
 - **API Metrics**: Response times, error rates, throughput

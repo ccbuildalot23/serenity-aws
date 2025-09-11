@@ -9,7 +9,7 @@ on:
   workflow_dispatch:  # Allow manual triggering for testing
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   comprehensive-security-scan:
@@ -253,7 +253,7 @@ jobs:
       - name: Install Playwright browsers
         run: |
           cd apps/web-phase2
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps
       
       - name: Build applications
         run: |
@@ -286,7 +286,7 @@ jobs:
       - name: Run PHI Protection E2E Tests
         run: |
           cd apps/web-phase2
-          npx playwright test tests/e2e/phi-protection.spec.ts --reporter=html
+          xvfb-run -a npx playwright test tests/e2e/phi-protection.spec.ts --reporter=html
         env:
           PLAYWRIGHT_HEADLESS: true
       

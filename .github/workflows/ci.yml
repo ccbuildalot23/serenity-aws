@@ -235,6 +235,101 @@ jobs:
           name: web-phase2-build
           path: apps/web-phase2/.next
 
+  web-auth-specs:
+    name: Web Auth Specs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+          
+      - name: Install dependencies
+        run: pnpm i -w
+        
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+        
+      - name: Run web-phase2 auth route tests
+        run: |
+          cd apps/web-phase2
+          npm test src/app/api/auth/me/__tests__/route.test.ts src/app/api/auth/verify-session/__tests__/route.test.ts
+        env:
+          NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES: 15
+          NEXT_PUBLIC_MOCK_AUTH: true
+          NODE_ENV: test
+          
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-auth-test-results
+          path: apps/web-phase2/test-results/
+
+  api-tests-coverage:
+    name: API Tests Coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: serenity_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+          
+      - name: Install dependencies
+        run: pnpm i -w
+        
+      - name: Setup test database
+        run: |
+          cd packages/database
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
+          
+      - name: Run API tests with coverage
+        run: |
+          cd apps/api
+          npm run test:cov
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/serenity_test
+          JWT_SECRET: test-secret-key-for-testing-only
+          
+      - name: Extract coverage percentage
+        run: node scripts/extract-coverage.mjs
+        
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: apps/api/coverage/coverage-final.json
+
   terraform:
     name: Terraform Validation
     runs-on: ubuntu-latest
@@ -298,7 +393,7 @@ jobs:
   docs-regen:
     name: Regenerate Documentation
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [api-tests-coverage]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -308,12 +403,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-coverage
+          path: apps/api/coverage/
+          
+      - name: Extract dynamic coverage
+        id: coverage
+        run: |
+          COVERAGE_PCT=$(node scripts/extract-coverage.mjs | grep STATEMENTS_PCT | cut -d'=' -f2)
+          echo "coverage_pct=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+          
       - name: Regenerate consent docs
         run: |
+          # Get latest nightly run
+          NIGHTLY_RUN_URL=$(gh run list --workflow=nightly-compliance.yml --limit=1 --json url --jq '.[0].url')
+          
           node scripts/generate-consent-docs.mjs \
             --ciRunUrl=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} \
-            --nightlyRunUrl=https://github.com/ccbuildalot23/serenity-aws/actions/runs/17601323821 \
-            --coverage=75.16%
+            --nightlyRunUrl=$NIGHTLY_RUN_URL \
+            --coverage=${{ steps.coverage.outputs.coverage_pct }}%
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             
       - name: Commit updated docs
         run: |

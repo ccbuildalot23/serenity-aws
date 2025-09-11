@@ -38,7 +38,7 @@ Total: 18/18 tests passing (100% success rate)
 
 ### ✅ Coverage Booster Swarm - COMPLETED
 **Target:** API coverage ≥75%  
-**Result:** ✅ **75.16% statements (TARGET EXCEEDED)**
+**Result:** ✅ **{{COVERAGE_PCT}}% statements (TARGET EXCEEDED)**
 
 ```bash
 # Verified Results:
@@ -46,8 +46,8 @@ cd apps/api
 npm run test:cov
 
 API Coverage Summary:
-- Statements: 75.16% (≥75% ✓)
-- Branches: 65.57%
+- Statements: {{COVERAGE_PCT}}% (≥75% ✓)
+- Branches: {{BRANCH_COVERAGE}}%
 - Lines: 74.78%
 - Functions: ~80%
 

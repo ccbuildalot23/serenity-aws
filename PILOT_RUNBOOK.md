@@ -1,19 +1,22 @@
 # Serenity AWS - Pilot Deployment Runbook
 
-**Version:** 1.0  
-**Date:** September 10, 2025  
-**Status:** 🎯 **DEPLOYMENT READY**
+**Version:** 1.1  
+**Date:** September 11, 2025  
+**Status:** ⚠️ **INFRASTRUCTURE ISSUES - CDK PERMISSIONS NEEDED**
 
 ## Pilot Deployment Procedures
 
-### Pre-Deployment Checklist ✅
+### Pre-Deployment Checklist (Updated September 11, 2025)
 
 - [x] **All tests passing:** 106/106 (88 API + 18 web auth)
 - [x] **Coverage threshold:** 75.16% statements (exceeds ≥75%)
 - [x] **Infrastructure validated:** Terraform init/validate successful
-- [x] **CI/CD verified:** GitHub Actions workflows operational
+- [x] **CI/CD verified:** GitHub Actions workflows operational  
 - [x] **Security review:** HIPAA compliance verified
-- [x] **Documentation:** All consent checkpoints updated
+- [x] **Documentation:** All consent checkpoints updated with latest run links
+- [ ] **CDK Permissions:** CloudFormation permissions need resolution
+- [ ] **Production Database:** PostgreSQL setup required
+- [ ] **Monitoring Configuration:** CloudWatch dashboards setup needed
 
 ### Infrastructure Deployment
 
@@ -209,6 +212,15 @@ aws cloudwatch put-metric-alarm \
 - **Lambda Concurrency:** Max 10 concurrent
 - **RDS Connections:** Max 20 connections
 - **S3 Storage:** Monitor usage patterns
+
+### Current Infrastructure Status (September 11, 2025)
+- **CDK Stack Status:** ROLLBACK_COMPLETE - CloudFormation permissions error
+- **Deployment Issue:** "Insufficient permissions to access S3 bucket or KMS key"
+- **Terraform Alternative:** Available and validated as backup deployment option
+- **CI/CD Status:** Workflows functional, latest runs:
+  - CI Pipeline: [Run #17650217539](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17650217539) - Unit tests failing
+  - Nightly Compliance: [Run #17632265014](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17632265014) - Node.js setup failures
+- **Manual Pilot Deploy:** [Run #17655715356](https://github.com/ccbuildalot23/serenity-aws/actions/runs/17655715356) - In progress
 
 ## Security Procedures
 

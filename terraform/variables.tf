@@ -228,3 +228,14 @@ variable "reserved_capacity_percentage" {
     error_message = "Reserved capacity percentage must be between 0 and 100."
   }
 }
+
+variable "common_tags" {
+  description = "Common tags to apply to all resources"
+  type        = map(string)
+  default     = {
+    Environment = "pilot"
+    Project     = "Serenity-AWS"
+    HIPAA       = "compliant"
+    ManagedBy   = "Terraform"
+  }
+}
