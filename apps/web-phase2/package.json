@@ -10,7 +10,8 @@
     "test:unit": "jest --coverage",
     "test:integration": "echo 'No integration tests for web-phase2 yet'",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "amazon-cognito-identity-js": "^6.3.12",
@@ -31,6 +32,7 @@
     "zustand": "^4.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
