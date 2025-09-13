@@ -106,3 +106,9 @@ amplify/
 # Audit logs (contain PHI)
 audit-logs/
 *.audit.json
+
+# Terraform binaries (use hashicorp/setup-terraform in CI/CD)
+terraform_bin/
+terraform*
+!*.tf
+!*.tfvars

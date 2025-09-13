@@ -78,15 +78,35 @@ export default function ProviderDashboard() {
         return;
       }
 
-      // Fetch real metrics from API with fallback to mock data
-      const [patientResponse, revenueResponse] = await Promise.all([
-        apiService.getPatientMetrics().catch(() => ({ data: null })),
-        apiService.getRevenueMetrics().catch(() => ({ data: null }))
-      ]);
+      // Get authentication token
+      const session = await cognitoAuth.getCurrentSession();
+      const accessToken = session?.getAccessToken()?.getJwtToken();
 
-      // Use API data if available, otherwise use mock data
-      const patientData = patientResponse.data;
-      const revenueData = revenueResponse.data;
+      // Fetch dashboard data from our working API endpoint
+      const dashboardResponse = await fetch(process.env.NEXT_PUBLIC_API_URL + '/provider/dashboard', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': accessToken ? `Bearer ${accessToken}` : '',
+        }
+      });
+
+      let apiData = null;
+      if (dashboardResponse.ok) {
+        const result = await dashboardResponse.json();
+        if (result.success && result.dashboard) {
+          apiData = result.dashboard;
+        } else if (result.success && result.patients) {
+          // Handle direct response format
+          apiData = result;
+        }
+      } else {
+        console.warn('Dashboard API call failed:', dashboardResponse.status, dashboardResponse.statusText);
+      }
+
+      // Use API data if available, otherwise use fallback data
+      const patientData = apiData?.patients || null;
+      const revenueData = apiData?.metrics || null;
 
       setMetrics({
         roi: {
