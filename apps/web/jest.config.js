@@ -22,7 +22,8 @@ const customJestConfig = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.(ts|tsx|js)',
-    '<rootDir>/src/**/*.(test|spec).(ts|tsx|js)'
+    '<rootDir>/src/**/*.(test|spec).(ts|tsx|js)',
+    '!<rootDir>/src/**/*.spec.ts'  // Exclude Playwright spec files
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
